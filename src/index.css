@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+
+/*
+ * Dark is the default and the primary design target (sideline use, sun/stadium
+ * lights). Light mode is a runtime override for film-room use on desktop, toggled
+ * by adding `.light` to <html> — see src/theme/ThemeProvider.tsx. Components
+ * consume the semantic tokens below (bg-surface, text-text, etc.) rather than
+ * raw Tailwind palette colors, so the whole app repaints from one class flip.
+ */
+@theme {
+  --color-surface: #0a0e14;
+  --color-surface-raised: #121822;
+  --color-surface-overlay: #1c2532;
+  --color-border: #262f3d;
+  --color-text: #e8edf5;
+  --color-text-muted: #8b96a8;
+  --color-accent: #f2b705;
+  --color-accent-contrast: #14110a;
+  --color-danger: #ef4444;
+  --color-danger-contrast: #fff5f5;
+}
+
+:root.light {
+  --color-surface: #f3f4f6;
+  --color-surface-raised: #ffffff;
+  --color-surface-overlay: #ffffff;
+  --color-border: #dbe0e6;
+  --color-text: #10151c;
+  --color-text-muted: #5b6472;
+  --color-accent: #a3690a;
+  --color-accent-contrast: #ffffff;
+  --color-danger: #dc2626;
+  --color-danger-contrast: #fff5f5;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface text-text antialiased;
+  margin: 0;
+  color-scheme: dark;
+}
+
+:root.light body {
+  color-scheme: light;
+}
