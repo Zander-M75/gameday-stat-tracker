@@ -30,7 +30,9 @@ before resuming.
 - [x] Phase 7: Supabase schema and auth — Postgres schema + RLS mirroring the
       local Dexie tables, magic-link auth via a non-gating `/account` screen.
       No sync yet.
-- [ ] Phase 8: Sync engine
+- [x] Phase 8: Sync engine — local outbox queue, idempotent upserts by
+      client-generated UUID, DB-level last-write-wins + monotonic-delete
+      conflict resolution, unobtrusive pending/syncing indicator
 - [ ] Phase 9: Season aggregation
 - [ ] Phase 10: Shareable recap graphic
 - [ ] Phase 11: Cross-device pass
@@ -43,9 +45,111 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 7 is done. No session break here — continuing straight through to
-phase 8 (sync engine), then stopping for the working agreement's session
-break.**
+**Phase 8 is done — this is the working agreement's third and final
+scheduled session break. Start a fresh session before phase 9 (season
+aggregation).**
+
+### Phase 8 decisions worth knowing before touching sync
+
+- **Nothing here has run against a live Supabase project either** — same
+  caveat as phase 7, compounded: the sync engine has only ever been verified
+  by `npm run build`/lint passing and a careful read-through, never against
+  real network calls, real RLS policies, or the two conflict-resolution
+  triggers actually firing. Before trusting this phase, the user needs to
+  (in order): finish the phase 7 setup steps (project, migration 1, `.env`,
+  auth redirect URLs) if not already done, then also run
+  `supabase/migrations/0002_sync_conflict_resolution.sql`, then exercise it
+  for real — sign in on `/account`, record some stat events, and check the
+  Supabase table editor to confirm rows actually land, then specifically try
+  to reproduce a conflict (edit the same player from two tabs, or flip
+  offline/online mid-game) to confirm the triggers behave as documented
+  rather than just trusting the SQL reads correctly.
+
+- **The queue is a local outbox keyed by entity, not by write.** `enqueueSync`
+  (`src/sync/queue.ts`) upserts one `syncQueue` row per `(entityType,
+entityId)` pair using a deterministic id (`` `${entityType}:${entityId}` ``)
+  rather than a fresh uuid per call — so ten edits to the same player before
+  it ever syncs collapse into one pending row, and the row reopens
+  (`syncedAt` reset to `null`) if a synced entity changes again later. Every
+  mutation in `db/queries.ts` (the "high-risk" data layer per CLAUDE.md's own
+  warning) now ends with an `await enqueueSync(...)` call — if a new mutation
+  function gets added there later, it needs one too, or its writes will
+  silently never reach the cloud.
+
+- **`flushSyncQueue` (`src/sync/syncEngine.ts`) has no per-write trigger** —
+  nothing in `db/queries.ts` calls it. It's driven entirely by
+  `useSyncEngine()` (mounted once in `App.tsx`: flush on mount, on the
+  browser's `online` event, and on a 20s interval fallback) plus one extra
+  nudge from `AuthProvider` right after a session appears. This was a
+  deliberate simplification — CLAUDE.md's spec only asks for "background"
+  sync that flushes "when connectivity returns," not low-latency delivery,
+  so a short interval was simpler than threading a flush call through every
+  write in the already-sensitive data layer. If a coach ever needs
+  near-real-time cross-device visibility mid-game, that's the thing to
+  revisit, not the queue design itself.
+
+- **Re-entrancy: `isSyncing` is set synchronously, before the first
+  `await`.** Multiple triggers (mount + an `online` event, say) can fire in
+  the same tick; setting the flag before any `await` is what actually makes
+  the guard work — setting it after the first `await` (an earlier draft of
+  this file did exactly that) lets two overlapping calls both read `false`
+  and both proceed. Idempotent upserts would have made that merely wasteful
+  rather than incorrect, but there was no reason to leave the race in once
+  spotted.
+
+- **Ownership is resolved at flush time, not stored locally.** `teamToRow`
+  (`src/sync/mapping.ts`) takes an `ownerId` parameter that `flushSyncQueue`
+  supplies from `supabase.auth.getSession()` — there's no `ownerId` field
+  anywhere in `db/types.ts`, since the local app has no concept of "who owns
+  this team" (see the phase 7 note on `teams.owner_id`). A flush is a no-op
+  whenever there's no active session, both because there's nothing valid to
+  stamp a new team with and because every RLS policy would reject it anyway.
+
+- **Conflict resolution lives in the database, not the client** —
+  `supabase/migrations/0002_sync_conflict_resolution.sql`. Two trigger-based
+  rules, chosen because `players`/`games` and `stat_events` are different
+  shapes of "conflict": (1) `players`/`games` get a `BEFORE UPDATE` trigger
+  that returns `OLD` (keeping the existing row, no error) whenever the
+  incoming `updated_at` isn't strictly newer — real last-write-wins, immune
+  to whatever order two devices' flushes happen to race in; (2) `stat_events`
+  get a trigger that ORs incoming and existing `deleted` instead of
+  overwriting it, because `deleted` is monotonic locally (`db/queries.ts`
+  never flips it back to `false`) — a delete can never be lost to a
+  later-arriving flush of the pre-delete state. `teams` gets neither trigger:
+  no `updated_at` column (mirrors the local `Team` type, which has none) and
+  nothing in the app updates a team after creation, so there's nothing to
+  conflict over.
+
+- **A per-item failure never throws past `flushSyncQueue`** — `syncOne`'s
+  errors are caught inside the loop in `flushSyncQueue`, recorded onto that
+  item's `attempts`/`lastError`, and the loop continues to the next item.
+  There's no backoff/retry cap; a permanently-broken row just gets retried
+  on every flush forever, at whatever cadence `useSyncEngine`'s interval
+  runs. That was a deliberate scope call, not an oversight — CLAUDE.md asks
+  for conflict-resolution edge cases to be handled and documented, not a
+  general retry/backoff policy, and one was easy to add later if a real
+  failure mode ever shows up needing it.
+
+- **`SyncStatusIndicator` and `OfflineIndicator` now share one positioned
+  wrapper, `StatusBadges`** (`src/components/layout/`) — both indicators lost
+  their own `fixed`/positioning classes and became plain pills;
+  `StatusBadges` owns the `fixed right-2` placement and stacks whichever of
+  the two are actually rendering via flex `gap` (which only applies between
+  real children, so zero/one/two visible badges all self-arrange with no
+  manual offset math). `AppShell` now mounts `<StatusBadges />` where it used
+  to mount `<OfflineIndicator />` directly — this was anticipated in the
+  phase 6 note ("if a later phase adds more always-present chrome, put it
+  here too"). If a future phase adds a third always-present badge, extend
+  `StatusBadges`, don't give it its own separate fixed-position mount point.
+
+- **Sync status rewrites `SyncQueueItem.syncedAt`/`attempts`/`lastError` in
+  place rather than deleting rows once synced** — the queue doubles as a
+  light sync log (matches the fields the phase 1 type already had), not a
+  transient buffer. Over a full season this means one permanent `syncQueue`
+  row per distinct entity ever created (not per write, thanks to the
+  dedup-by-id upsert above) — thousands of rows across a season is still
+  trivial for IndexedDB, so no pruning was added. Revisit only if that
+  assumption turns out wrong.
 
 ### Phase 7 decisions worth knowing before touching Supabase/auth
 

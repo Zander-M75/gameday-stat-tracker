@@ -1,5 +1,6 @@
 import { db } from './db'
 import { createId } from './id'
+import { enqueueSync } from '../sync/queue'
 import type {
   Game,
   GameStatus,
@@ -53,6 +54,7 @@ export function getOrCreateTeam(): Promise<Team> {
       if (existing) return existing
       const team: Team = { id: createId(), name: 'My Team', createdAt: Date.now() }
       await db.teams.add(team)
+      await enqueueSync('team', team.id)
       return team
     })().catch((error: unknown) => {
       // A failed attempt shouldn't permanently poison this cache for the
@@ -83,15 +85,18 @@ export async function addPlayer(teamId: string, input: NewPlayerInput): Promise<
     updatedAt: now,
   }
   await db.players.add(player)
+  await enqueueSync('player', player.id)
   return player
 }
 
 export async function updatePlayer(id: string, changes: Partial<NewPlayerInput>): Promise<void> {
   await db.players.update(id, { ...changes, updatedAt: Date.now() })
+  await enqueueSync('player', id)
 }
 
 export async function setPlayerActive(id: string, isActive: boolean): Promise<void> {
   await db.players.update(id, { isActive, updatedAt: Date.now() })
+  await enqueueSync('player', id)
 }
 
 export async function bulkAddPlayers(teamId: string, inputs: NewPlayerInput[]): Promise<void> {
@@ -105,6 +110,7 @@ export async function bulkAddPlayers(teamId: string, inputs: NewPlayerInput[]): 
     updatedAt: now,
   }))
   await db.players.bulkAdd(players)
+  await Promise.all(players.map((player) => enqueueSync('player', player.id)))
 }
 
 /** Most recent first — the natural order for both the in-progress and past-games lists. */
@@ -135,11 +141,13 @@ export async function createGame(teamId: string, input: NewGameInput): Promise<G
     updatedAt: now,
   }
   await db.games.add(game)
+  await enqueueSync('game', game.id)
   return game
 }
 
 export async function setGameStatus(id: string, status: GameStatus): Promise<void> {
   await db.games.update(id, { status, updatedAt: Date.now() })
+  await enqueueSync('game', id)
 }
 
 /**
@@ -172,6 +180,7 @@ export async function recordPlayerEvent(input: RecordPlayerEventInput): Promise<
     deleted: false,
   }
   await db.statEvents.add(event)
+  await enqueueSync('statEvent', event.id)
   return event
 }
 
@@ -196,6 +205,7 @@ export async function recordAssist(input: RecordAssistInput): Promise<StatEvent>
     deleted: false,
   }
   await db.statEvents.add(event)
+  await enqueueSync('statEvent', event.id)
   return event
 }
 
@@ -219,6 +229,7 @@ export async function recordTeamEvent(input: RecordTeamEventInput): Promise<Stat
     deleted: false,
   }
   await db.statEvents.add(event)
+  await enqueueSync('statEvent', event.id)
   return event
 }
 
@@ -246,6 +257,7 @@ export async function recordPenalty(input: RecordPenaltyInput): Promise<StatEven
     penaltyReleasable: input.penaltyReleasable,
   }
   await db.statEvents.add(event)
+  await enqueueSync('statEvent', event.id)
   return event
 }
 
@@ -257,6 +269,7 @@ export async function advanceQuarter(gameId: string, endingQuarter: number): Pro
 /** Soft-delete: used for both manual delete (event feed) and undo. */
 export async function deleteEvent(id: string): Promise<void> {
   await db.statEvents.update(id, { deleted: true })
+  await enqueueSync('statEvent', id)
 }
 
 /** Reverses the most recent live event for the game, whatever it was. Returns the event that was undone, if any. */

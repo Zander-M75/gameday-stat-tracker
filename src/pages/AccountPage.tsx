@@ -7,9 +7,11 @@ const inputClasses =
 
 /**
  * Not part of the primary Roster/Games/Season nav (see Sidebar/AccountButton)
- * — auth is additive on top of the local-first app, never a gate. Phase 7 is
- * schema + auth only, no sync wired up yet, so signing in here doesn't do
- * anything to the coach's data yet beyond establishing a session.
+ * — auth is additive on top of the local-first app, never a gate. Signing in
+ * here also nudges a sync flush (see AuthProvider) so anything queued while
+ * signed out starts pushing right away, but that's incidental to this
+ * screen — there's no sync-progress UI here on purpose, see
+ * SyncStatusIndicator for that.
  */
 export function AccountPage() {
   const { status, session, signInWithEmail, signOut } = useAuth()

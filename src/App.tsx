@@ -6,8 +6,13 @@ import { GameDetailPage } from './pages/GameDetailPage'
 import { GamesPage } from './pages/GamesPage'
 import { RosterPage } from './pages/RosterPage'
 import { SeasonPage } from './pages/SeasonPage'
+import { useSyncEngine } from './sync/useSyncEngine'
 
 function App() {
+  // Mounted once at the app root — see useSyncEngine.ts for what actually
+  // triggers a flush (mount, reconnect, periodic fallback).
+  useSyncEngine()
+
   return (
     <AppShell>
       <Routes>

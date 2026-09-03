@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { flushSyncQueue } from '../sync/syncEngine'
 import { supabase } from '../supabase/client'
 
 export type AuthStatus = 'unconfigured' | 'loading' | 'signed-in' | 'signed-out'
@@ -15,10 +16,11 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 /**
  * Wraps the whole app (see main.tsx) but nothing downstream ever gates on
- * being signed in — phase 7 is schema + auth only, no sync yet, and the app
- * must stay fully usable offline/unauthenticated regardless. This just makes
- * session state available to the one place that cares right now (the
- * account page), ahead of phase 8 wiring it into an actual sync engine.
+ * being signed in — the app must stay fully usable offline/unauthenticated
+ * regardless of auth state. `flushSyncQueue` (phase 8) reads the live
+ * session for itself via `supabase.auth.getSession()` rather than pulling it
+ * from this context, since it's a plain module, not a component — this
+ * provider's session state is for UI (the account page) only.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -37,6 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
       setStatus(newSession ? 'signed-in' : 'signed-out')
+      // A backlog may have built up while signed out (or before this magic
+      // link was clicked) — nudge a flush right away instead of waiting on
+      // useSyncEngine's interval.
+      if (newSession) void flushSyncQueue()
     })
 
     return () => subscription.unsubscribe()
