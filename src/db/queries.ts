@@ -54,7 +54,13 @@ export function getOrCreateTeam(): Promise<Team> {
       const team: Team = { id: createId(), name: 'My Team', createdAt: Date.now() }
       await db.teams.add(team)
       return team
-    })()
+    })().catch((error: unknown) => {
+      // A failed attempt shouldn't permanently poison this cache for the
+      // rest of the session — clear it so the next caller gets a fresh try
+      // instead of the same rejected promise forever.
+      ensureTeamPromise = null
+      throw error
+    })
   }
   return ensureTeamPromise
 }
