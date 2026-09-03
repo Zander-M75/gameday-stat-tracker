@@ -146,7 +146,14 @@ export async function seedDatabase(options: { force?: boolean } = {}): Promise<v
   }
 
   const finishedEvents = buildFinishedGameEvents(finishedGame.id, sixDaysAgo, byNumber)
-  const liveEvents = buildLiveGameEvents(liveGame.id, now, byNumber)
+  // Started 10 fake minutes before "now" (not at "now") so every synthetic
+  // event timestamp lands in the past — buildLiveGameEvents advances up to 7
+  // fake minutes forward from its start, and a real event recorded moments
+  // after seeding must sort *after* all of them, not before. Getting this
+  // wrong doesn't corrupt anything, but it makes "undo the last event" and
+  // the event feed's ordering look wrong against the seeded live game for
+  // several minutes after seeding, which is confusing enough to fix here.
+  const liveEvents = buildLiveGameEvents(liveGame.id, now - 10 * 60_000, byNumber)
 
   await db.transaction('rw', db.teams, db.players, db.games, db.statEvents, async () => {
     await db.teams.add(team)

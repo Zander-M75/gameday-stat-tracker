@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import { StatEntryPanel } from '../components/stat-entry/StatEntryPanel'
 import { allPlayersForTeam, getGame, setGameStatus } from '../db/queries'
 import { formatGameDate } from '../domain/formatDate'
 
@@ -51,27 +52,14 @@ export function GameDetailPage() {
         </button>
       </div>
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">
-          Dressed ({dressed.length})
-        </h2>
-        {dressed.length === 0 ? (
-          <p className="text-sm text-text-muted">No players were marked dressed for this game.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            {dressed.map((player) => (
-              <li
-                key={player.id}
-                className="rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-text"
-              >
-                #{player.jerseyNumber} {player.firstName} {player.lastName}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {dressed.length === 0 && (
+        <p className="text-sm text-text-muted">
+          No players were marked dressed for this game — team-level events are still recordable
+          below, but player stats have nothing to attribute to.
+        </p>
+      )}
 
-      <p className="text-sm text-text-muted">Live stat entry is coming in a later phase.</p>
+      <StatEntryPanel game={game} allPlayers={players} dressedPlayers={dressed} />
     </div>
   )
 }

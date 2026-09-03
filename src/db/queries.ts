@@ -1,6 +1,16 @@
 import { db } from './db'
 import { createId } from './id'
-import type { Game, GameStatus, Player, Position, StatEvent, Team } from './types'
+import type {
+  Game,
+  GameStatus,
+  PenaltyDurationSeconds,
+  Player,
+  PlayerEventType,
+  Position,
+  StatEvent,
+  Team,
+  TeamEventType,
+} from './types'
 
 /**
  * `isActive`/`deleted` aren't indexed (see db.ts) — these helpers do the
@@ -124,4 +134,130 @@ export async function createGame(teamId: string, input: NewGameInput): Promise<G
 
 export async function setGameStatus(id: string, status: GameStatus): Promise<void> {
   await db.games.update(id, { status, updatedAt: Date.now() })
+}
+
+/**
+ * Stat-recording functions below. Each writes one optimistic row to
+ * `statEvents` and returns it — callers (phase 4a's stat-entry UI) use the
+ * returned event to drive toasts and the goal→assist picker. There's no
+ * separate "undo stack" data structure: `undoLastEvent` soft-deletes the most
+ * recent live event for the game, so the event log itself is the undo stack,
+ * and it can never drift out of sync with what's on screen.
+ */
+
+export interface RecordPlayerEventInput {
+  gameId: string
+  type: PlayerEventType
+  playerId: string
+  quarter: number
+  gameClock?: string | null
+}
+
+export async function recordPlayerEvent(input: RecordPlayerEventInput): Promise<StatEvent> {
+  const event: StatEvent = {
+    id: createId(),
+    gameId: input.gameId,
+    type: input.type,
+    playerId: input.playerId,
+    quarter: input.quarter,
+    gameClock: input.gameClock ?? null,
+    timestamp: Date.now(),
+    relatedEventId: null,
+    deleted: false,
+  }
+  await db.statEvents.add(event)
+  return event
+}
+
+export interface RecordAssistInput {
+  gameId: string
+  playerId: string
+  goalEventId: string
+  quarter: number
+  gameClock?: string | null
+}
+
+export async function recordAssist(input: RecordAssistInput): Promise<StatEvent> {
+  const event: StatEvent = {
+    id: createId(),
+    gameId: input.gameId,
+    type: 'assist',
+    playerId: input.playerId,
+    quarter: input.quarter,
+    gameClock: input.gameClock ?? null,
+    timestamp: Date.now(),
+    relatedEventId: input.goalEventId,
+    deleted: false,
+  }
+  await db.statEvents.add(event)
+  return event
+}
+
+export interface RecordTeamEventInput {
+  gameId: string
+  type: TeamEventType
+  quarter: number
+  gameClock?: string | null
+}
+
+export async function recordTeamEvent(input: RecordTeamEventInput): Promise<StatEvent> {
+  const event: StatEvent = {
+    id: createId(),
+    gameId: input.gameId,
+    type: input.type,
+    playerId: null,
+    quarter: input.quarter,
+    gameClock: input.gameClock ?? null,
+    timestamp: Date.now(),
+    relatedEventId: null,
+    deleted: false,
+  }
+  await db.statEvents.add(event)
+  return event
+}
+
+export interface RecordPenaltyInput {
+  gameId: string
+  playerId: string
+  quarter: number
+  penaltyDurationSeconds: PenaltyDurationSeconds
+  penaltyReleasable: boolean
+  gameClock?: string | null
+}
+
+export async function recordPenalty(input: RecordPenaltyInput): Promise<StatEvent> {
+  const event: StatEvent = {
+    id: createId(),
+    gameId: input.gameId,
+    type: 'penalty',
+    playerId: input.playerId,
+    quarter: input.quarter,
+    gameClock: input.gameClock ?? null,
+    timestamp: Date.now(),
+    relatedEventId: null,
+    deleted: false,
+    penaltyDurationSeconds: input.penaltyDurationSeconds,
+    penaltyReleasable: input.penaltyReleasable,
+  }
+  await db.statEvents.add(event)
+  return event
+}
+
+/** Records a `quarter_end` event for the quarter that's ending — the next quarter number is then derived automatically (see domain/quarter.ts). */
+export async function advanceQuarter(gameId: string, endingQuarter: number): Promise<StatEvent> {
+  return recordTeamEvent({ gameId, type: 'quarter_end', quarter: endingQuarter })
+}
+
+/** Soft-delete: used for both manual delete (event feed) and undo. */
+export async function deleteEvent(id: string): Promise<void> {
+  await db.statEvents.update(id, { deleted: true })
+}
+
+/** Reverses the most recent live event for the game, whatever it was. Returns the event that was undone, if any. */
+export async function undoLastEvent(gameId: string): Promise<StatEvent | undefined> {
+  const events = await liveEventsForGame(gameId)
+  const last = events.at(-1)
+  if (!last) return undefined
+  await deleteEvent(last.id)
+  return last
 }
