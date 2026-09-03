@@ -22,7 +22,7 @@ export function PenaltyPicker({ player, onConfirm, onDismiss }: PenaltyPickerPro
         <button
           type="button"
           onClick={onDismiss}
-          className="min-h-10 rounded-md px-3 text-sm font-semibold text-text-muted"
+          className="flex min-h-14 items-center rounded-md px-3 text-sm font-semibold text-text-muted xl:min-h-10"
         >
           Cancel
         </button>
@@ -35,7 +35,7 @@ export function PenaltyPicker({ player, onConfirm, onDismiss }: PenaltyPickerPro
               key={seconds}
               type="button"
               onClick={() => setDuration(seconds)}
-              className="flex min-h-12 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-text"
+              className="flex min-h-14 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-text xl:min-h-10"
             >
               {seconds}s
             </button>
@@ -46,14 +46,14 @@ export function PenaltyPicker({ player, onConfirm, onDismiss }: PenaltyPickerPro
           <button
             type="button"
             onClick={() => onConfirm(duration, true)}
-            className="flex min-h-12 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-text"
+            className="flex min-h-14 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-text xl:min-h-10"
           >
             Releasable
           </button>
           <button
             type="button"
             onClick={() => onConfirm(duration, false)}
-            className="flex min-h-12 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-text"
+            className="flex min-h-14 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-text xl:min-h-10"
           >
             Non-releasable
           </button>

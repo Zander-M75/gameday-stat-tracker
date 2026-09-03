@@ -251,7 +251,7 @@ export function SeasonTable({ lines }: SeasonTableProps) {
             type="button"
             onClick={() => toggleColumn(c.key)}
             aria-pressed={!hidden.has(c.key)}
-            className={`flex min-h-10 items-center rounded-full border px-3 text-xs font-semibold ${
+            className={`flex min-h-14 items-center rounded-full border px-3 text-xs font-semibold xl:min-h-10 ${
               hidden.has(c.key)
                 ? 'border-border text-text-muted'
                 : 'border-accent bg-accent/10 text-accent'
@@ -263,7 +263,7 @@ export function SeasonTable({ lines }: SeasonTableProps) {
         <button
           type="button"
           onClick={handleExport}
-          className="ml-auto flex min-h-10 items-center rounded-md bg-accent px-4 text-xs font-semibold text-accent-contrast"
+          className="ml-auto flex min-h-14 items-center rounded-md bg-accent px-4 text-xs font-semibold text-accent-contrast xl:min-h-10"
         >
           Export CSV
         </button>

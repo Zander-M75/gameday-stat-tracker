@@ -113,10 +113,15 @@ export function NewGameForm({ activePlayers, onCreate, onCancel }: NewGameFormPr
             <button
               type="button"
               onClick={() => setDressedIds(new Set(activePlayers.map((p) => p.id)))}
+              className="flex min-h-14 items-center xl:min-h-10"
             >
               All
             </button>
-            <button type="button" onClick={() => setDressedIds(new Set())}>
+            <button
+              type="button"
+              onClick={() => setDressedIds(new Set())}
+              className="flex min-h-14 items-center xl:min-h-10"
+            >
               None
             </button>
           </div>

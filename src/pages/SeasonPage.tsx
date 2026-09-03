@@ -31,7 +31,7 @@ export function SeasonPage() {
     <div className="flex min-h-full flex-col gap-4 p-4 md:p-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-text">Season</h1>
-        <label className="flex min-h-10 items-center gap-2 text-sm text-text-muted">
+        <label className="flex min-h-14 items-center gap-2 text-sm text-text-muted xl:min-h-10">
           <input
             type="checkbox"
             checked={showArchived}

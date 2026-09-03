@@ -38,7 +38,7 @@ export function Sidebar() {
       <NavLink
         to="/account"
         className={({ isActive }) =>
-          `flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm mb-1 ${
+          `flex min-h-14 items-center gap-2 rounded-lg px-3 text-sm mb-1 xl:min-h-10 ${
             isActive
               ? 'bg-surface-overlay text-accent'
               : 'text-text-muted hover:bg-surface-overlay hover:text-text'

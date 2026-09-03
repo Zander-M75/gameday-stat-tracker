@@ -92,11 +92,11 @@ export function RosterPage() {
         <button
           type="button"
           onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-          className="flex min-h-10 items-center gap-1 font-semibold text-text"
+          className="flex min-h-14 items-center gap-1 font-semibold text-text xl:min-h-10"
         >
           # {sortDir === 'asc' ? '↑' : '↓'}
         </button>
-        <label className="flex min-h-10 items-center gap-2 text-text-muted">
+        <label className="flex min-h-14 items-center gap-2 text-text-muted xl:min-h-10">
           <input
             type="checkbox"
             checked={showArchived}

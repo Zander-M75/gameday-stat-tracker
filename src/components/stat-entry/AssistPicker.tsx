@@ -22,7 +22,7 @@ export function AssistPicker({ scorer, candidates, onPick, onDismiss }: AssistPi
         <button
           type="button"
           onClick={onDismiss}
-          className="min-h-10 rounded-md px-3 text-sm font-semibold text-text-muted"
+          className="flex min-h-14 items-center rounded-md px-3 text-sm font-semibold text-text-muted xl:min-h-10"
         >
           No assist
         </button>
@@ -33,7 +33,7 @@ export function AssistPicker({ scorer, candidates, onPick, onDismiss }: AssistPi
             key={player.id}
             type="button"
             onClick={() => onPick(player.id)}
-            className="flex min-h-12 items-center gap-1 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-text"
+            className="flex min-h-14 items-center gap-1 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-text xl:min-h-10"
           >
             <span className="tabular-nums">#{player.jerseyNumber}</span>
             <span className="text-text-muted">{player.lastName}</span>

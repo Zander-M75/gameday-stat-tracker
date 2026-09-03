@@ -43,7 +43,9 @@ before resuming.
 - [x] Phase 10: Shareable recap graphic — canvas-rendered PNG (final score,
       W/L badge, top 3 performers), Download everywhere, Web Share API
       share on devices that support file attachments
-- [ ] Phase 11: Cross-device pass
+- [x] Phase 11: Cross-device pass — static audit at 390/768/1024/1440px
+      (touch targets, overflow, keyboard-shortcut scoping, nav exclusivity);
+      fixed 8 files with sub-56px touch targets on touch breakpoints
 - [ ] Phase 12: Polish and docs
 
 ## Session breaks
@@ -53,9 +55,84 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 10 is done. Continue straight into phase 11 (cross-device pass)
-next — no session break scheduled here; the working agreement's break list
-(after phase 3, 4d, 8) is already behind us.**
+**Phase 11 is done. Continue straight into phase 12 (polish and docs)
+next — the final phase, no session break scheduled here.**
+
+### Phase 11 decisions worth knowing before touching layout/breakpoints
+
+- **This was a static code audit, not a visual one — CLAUDE.md's command
+  execution rules block `npm run dev`, so nothing here was actually looked
+  at in a browser at any width.** What was done instead: traced every
+  `useBreakpoint()`/`isAtLeast()` call site against the four spec'd widths
+  (390 phone, 768 iPad portrait, 1024 iPad landscape, 1440 desktop) by hand
+  to confirm which layout branch each one resolves to at each width; grepped
+  every `min-h-*` utility in the app and classified each as a real
+  interactive touch target vs. decorative (e.g. `PlayerRow`'s jersey-number
+  badge `<span>` isn't a button, so it's exempt) vs. already
+  breakpoint-gated correctly; checked every `truncate` usage's containing
+  flex/grid context against the actual CSS spec rule that governs it (see
+  below); confirmed there's exactly one `keydown` listener in the whole app
+  (`DesktopStatEntryLayout`) and that the component mounting it is gated to
+  `isAtLeast('xl')`; confirmed `AppShell` is a clean if/else with no path
+  where both `Sidebar` and `BottomTabBar` render. Before trusting this
+  phase, actually resize a real browser window through all four widths (or
+  DevTools device toolbar) and look for what static analysis can't catch —
+  visual crowding, awkward wrapping, anything that reads wrong despite
+  being technically within spec.
+
+- **Fixed eight files where a real control was sized below the 56px
+  touch-target minimum on phone/iPad** (`min-h-10` = 40px or `min-h-12` =
+  48px used unconditionally, instead of gated to shrink only at `xl` like
+  the rest of the app already does elsewhere): `AssistPicker.tsx` ("No
+  assist" + candidate buttons — these render *during live stat entry*,
+  arguably the worst place in the app for an undersized target),
+  `PenaltyPicker.tsx` (same, "Cancel" + duration/releasable buttons),
+  `ThemeToggle.tsx` and `Sidebar.tsx`'s Account link (both render starting
+  at `lg`/1024px, which is iPad-landscape — still a touch device per
+  CLAUDE.md's own device bucket, not "desktop" until `xl`/1280), `RosterPage.tsx`'s
+  jersey-sort toggle and "Show archived" label, `SeasonPage.tsx`'s "Show
+  archived" label (copied the same undersized pattern when phase 9a was
+  written — caught by this same audit), `SeasonTable.tsx`'s column-toggle
+  chips and Export CSV button (inconsistent with that same file's own sort-header
+  buttons, which already had the correct responsive sizing), and
+  `NewGameForm.tsx`'s "All"/"None" dressed-roster shortcuts (had no height
+  class at all — true tap target was just the text line-height). All fixed
+  to the same pattern used everywhere else in the app for this exact
+  tradeoff: `min-h-14 xl:min-h-10` (56px through iPad landscape, 40px only
+  once truly desktop). **Deliberately left alone**: `DebugPage.tsx` (explicitly
+  a dev-only screen per its own phase 1 comment, not part of the coach-facing
+  nav this phase is auditing) and plain breadcrumb-style back links like "←
+  Games"/"← Season" (industry-standard exception for low-frequency inline
+  text navigation, not the accidental-mis-tap-during-live-entry problem the
+  56px rule exists to prevent — flagging this judgment call explicitly in
+  case it's wrong).
+
+- **The `truncate` audit surfaced no bugs, but is worth recording since the
+  reasoning isn't obvious**: several spans use `flex-1 truncate` (or just
+  `truncate`) with no `min-w-0` alongside them (`EventFeed.tsx`,
+  `DesktopPlayerList.tsx`, `EventFeedStrip.tsx`). That pattern usually *is*
+  a bug — a flex item's default automatic minimum width is its content size,
+  which fights `flex-1` and can push the row wider than its container
+  instead of truncating. But per the CSS Flexbox spec, an item's automatic
+  minimum size becomes `0` (not content-based) when its own computed
+  `overflow` isn't `visible` — and Tailwind's `truncate` utility bundles
+  `overflow: hidden` directly onto the element it's applied to. So wherever
+  `truncate` sits on the *same* element as `flex-1` (not a parent), it's
+  already safe with no `min-w-0` needed. Grid usages (`BoxScoreSummary`,
+  `SeasonPlayerCards`, `PlayerSeasonDetailPage`'s stat grids) are safe for a
+  related reason: Tailwind's `grid-cols-N` utilities already emit
+  `minmax(0, 1fr)` tracks, not `auto`-sized ones. Don't "fix" any of these
+  by reflexively adding `min-w-0` — it's already correct, and the note is
+  here so the next person doesn't waste time on it.
+
+- **The dense tables' `overflow-x-auto` + `min-w-[...]` wrappers
+  (`BoxScoreTable`, `SeasonTable`, `PlayerGameSplitsTable`) are intentional
+  contained horizontal scroll, not a violation of "nothing should
+  horizontally scroll."** That phrase in the phase 11 spec is read as
+  scoped to the page/body level (an accidental layout overflow), not a
+  mandate to rip out phase 5's already-established "the table scrolls
+  sideways within its own box on a narrow phone" design — the two aren't in
+  tension once "nothing" is read as "no unintentional page-level scroll."
 
 ### Phase 10 decisions worth knowing before touching the recap graphic
 
