@@ -38,6 +38,18 @@ export function liveEventsForGame(gameId: string): Promise<StatEvent[]> {
     .sortBy('timestamp')
 }
 
+/** Every live event across every game the team has ever played — the source for season aggregation (phase 9). */
+export async function liveEventsForTeam(teamId: string): Promise<StatEvent[]> {
+  const games = await db.games.where('teamId').equals(teamId).toArray()
+  if (games.length === 0) return []
+  const gameIds = games.map((g) => g.id)
+  return db.statEvents
+    .where('gameId')
+    .anyOf(gameIds)
+    .filter((e) => !e.deleted)
+    .sortBy('timestamp')
+}
+
 let ensureTeamPromise: Promise<Team> | null = null
 
 /**

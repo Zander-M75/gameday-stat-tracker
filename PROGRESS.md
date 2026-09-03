@@ -33,7 +33,11 @@ before resuming.
 - [x] Phase 8: Sync engine — local outbox queue, idempotent upserts by
       client-generated UUID, DB-level last-write-wins + monotonic-delete
       conflict resolution, unobtrusive pending/syncing indicator
-- [ ] Phase 9: Season aggregation
+- [x] Phase 9a: Season leaderboard — season-wide per-player aggregation
+      derived from the full team event log, dense sortable table with
+      column-visibility toggles and CSV export (desktop/iPad), stacked
+      sort-by cards (phone)
+- [ ] Phase 9b: Per-player season detail view (game-by-game splits)
 - [ ] Phase 10: Shareable recap graphic
 - [ ] Phase 11: Cross-device pass
 - [ ] Phase 12: Polish and docs
@@ -45,9 +49,70 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 8 is done — this is the working agreement's third and final
-scheduled session break. Start a fresh session before phase 9 (season
-aggregation).**
+**Phase 9a is done. Continue straight into phase 9b (per-player season
+detail view) next — no session break scheduled here; the working
+agreement's break list (after phase 3, 4d, 8) is already behind us.**
+
+### Phase 9a decisions worth knowing before touching season stats
+
+- **New `src/domain/season.ts`** is the season-wide derivation layer, same
+  philosophy as `boxScore.ts`: nothing stored, everything recomputed from
+  the live event log. `computeSeasonBoxScore(players, games, events)` calls
+  `computePlayerBoxScore` (phase 5) directly with the *entire* team event
+  log instead of one game's — that function already tallies by `playerId`
+  with no game scoping, so season totals fall out for free. The only thing
+  it can't answer is `gamesPlayed` (a player can be dressed and record zero
+  events), which is counted separately off every `Game.dressedPlayerIds`.
+
+- **New `liveEventsForTeam(teamId)` in `db/queries.ts`** — looks up every
+  game for the team, then `db.statEvents.where('gameId').anyOf(gameIds)`.
+  Not indexed as a compound query since there's no `[teamId+...]` index on
+  `statEvents` (it only has `gameId`, see `db.ts`) — this is a small
+  single-coach app, so an extra games lookup plus an `anyOf` is cheap. If a
+  future phase needs this at real scale, that's the place to reconsider, not
+  here.
+
+- **Season view reuses the whole roster (`allPlayersForTeam`), not just
+  active players**, with a `showArchived` toggle defaulted off — same
+  pattern as `RosterPage`. An archived player's season stats are real
+  history; hiding them by default (not deleting them from the computation)
+  matches the roster page's own "archived, not gone" semantics.
+
+- **The three "leaderboards" the phase spec names (goals, assists, points,
+  ground balls, caused turnovers, faceoff%, save%) are one sortable table**,
+  not seven separate ranked widgets — `SeasonTable`'s click-to-sort columns
+  already let any of those stats become "the leaderboard" by sorting on it,
+  same as `BoxScoreTable`'s pattern from phase 5. Default sort is `points`
+  desc so the table opens already reading as a leaderboard. This was a
+  scope call, not a literal reading of "leaderboards" (plural) — revisit
+  only if the user specifically wants separate top-N widgets.
+
+- **Column visibility is a `useState<Set<string>>` of hidden keys, not
+  persisted** — same "revisit only if a real user finds it annoying" call
+  phase 4d made for its shortcut-hint dismiss state. `#` and `Player` are
+  hard-coded non-toggleable (`Column.toggleable`) since a table with no
+  identity column is useless.
+
+- **CSV export (`domain/csv.ts`) always exports every column, ignoring the
+  current visibility toggles** — visibility is a display convenience, the
+  export is meant to be the full data dump for the coach to actually
+  analyze in a spreadsheet. No CSV library — a 10-line RFC 4180 quoting
+  function plus a Blob/`<a download>` trick, per CLAUDE.md's "20 lines
+  instead of a package" rule. Only wired up on `SeasonTable` (desktop/iPad),
+  not `SeasonPlayerCards` — the phase spec ties CSV export to "wide screens"
+  specifically.
+
+- **Phone gets real stacked cards, not a squeezed reuse of `SeasonTable`** —
+  unlike the phase 5 box score table (which just scrolls horizontally at any
+  width), phase 9's spec explicitly calls for cards on phone. `SeasonPlayerCards`
+  has its own "sort by" `<select>` standing in for click-to-sort headers,
+  since a full 18-column table has nowhere to go at 390px.
+
+- **Routing to a per-player detail view (`/season/:playerId`) is already
+  wired from both `SeasonTable`'s player-name cell and `SeasonPlayerCards`'
+  whole-card link, but the destination page doesn't exist yet** — that's
+  phase 9b. Don't be surprised the link 404s (falls through to the catch-all
+  redirect) until then.
 
 ### Phase 8 decisions worth knowing before touching sync
 
