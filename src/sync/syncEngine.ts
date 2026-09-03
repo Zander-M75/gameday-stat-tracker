@@ -2,6 +2,7 @@ import { db } from '../db/db'
 import type { SyncEntityType, SyncQueueItem } from '../db/types'
 import { supabase } from '../supabase/client'
 import { gameToRow, playerToRow, statEventToRow, teamToRow } from './mapping'
+import { enqueueSync } from './queue'
 
 const TABLE_FOR: Record<SyncEntityType, string> = {
   team: 'teams',
@@ -24,6 +25,42 @@ function describeError(error: unknown): string {
     return [code, message, details, hint].filter(Boolean).join(' | ')
   }
   return String(error)
+}
+
+/**
+ * Backfills a syncQueue row for any local entity that has none at all — not
+ * "failed to sync," but never enqueued in the first place. The dev seed
+ * script (src/db/seed.ts) writes directly to Dexie via add/bulkAdd for every
+ * table (team, players, games, statEvents) and never calls enqueueSync, so
+ * anything it created is invisible to the sync queue and can never reach
+ * Supabase. Left un-synced, that's not just missing data: since every other
+ * table's row references a team_id/game_id/player_id/related_event_id as a
+ * foreign key, Postgres rejects the *referencing* row too (RLS finds no
+ * matching team, or the FK target genuinely doesn't exist), so one
+ * never-enqueued entity can silently block real, correctly-queued data
+ * downstream of it forever. Cheap to run on every flush at this app's scale
+ * (a season's worth of rows) and a no-op once every id already has a row.
+ */
+async function backfillMissingSyncQueueEntries(): Promise<void> {
+  const [existingIds, teams, players, games, statEvents] = await Promise.all([
+    db.syncQueue.toCollection().primaryKeys(),
+    db.teams.toArray(),
+    db.players.toArray(),
+    db.games.toArray(),
+    db.statEvents.toArray(),
+  ])
+  const known = new Set(existingIds as string[])
+  const all: Array<{ entityType: SyncEntityType; entityId: string }> = [
+    ...teams.map((t) => ({ entityType: 'team' as const, entityId: t.id })),
+    ...players.map((p) => ({ entityType: 'player' as const, entityId: p.id })),
+    ...games.map((g) => ({ entityType: 'game' as const, entityId: g.id })),
+    ...statEvents.map((e) => ({ entityType: 'statEvent' as const, entityId: e.id })),
+  ]
+  for (const { entityType, entityId } of all) {
+    if (!known.has(`${entityType}:${entityId}`)) {
+      await enqueueSync(entityType, entityId)
+    }
+  }
 }
 
 let isSyncing = false
@@ -71,6 +108,8 @@ export async function flushSyncQueue(): Promise<void> {
     // owner to stamp a new team with and nothing would pass the policy
     // check anyway, so there's nothing useful to push yet.
     if (!ownerId) return
+
+    await backfillMissingSyncQueueEntries()
 
     const items = await db.syncQueue.toArray()
     // `syncedAt` is nullable, and IndexedDB indexes silently drop records

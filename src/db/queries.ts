@@ -63,21 +63,7 @@ export function getOrCreateTeam(): Promise<Team> {
   if (!ensureTeamPromise) {
     ensureTeamPromise = (async () => {
       const existing = await db.teams.toCollection().first()
-      if (existing) {
-        // Backfill for a team that was never enqueued in the first place —
-        // e.g. one written directly by the dev seed script (src/db/seed.ts),
-        // which bypasses enqueueSync entirely. Without this, that team can
-        // never sync, and since every player/game/statEvent this app ever
-        // creates points at it as a foreign key, Supabase's RLS check on
-        // every one of those tables (`team_id in (select id from teams
-        // where owner_id = auth.uid())`) always resolves to nothing and
-        // rejects them with a 403 — a real bug, not a policy mistake. This
-        // only fires once: after the first backfill, the queue row exists
-        // and this is a no-op on every later load.
-        const queued = await db.syncQueue.get(`team:${existing.id}`)
-        if (!queued) await enqueueSync('team', existing.id)
-        return existing
-      }
+      if (existing) return existing
       const team: Team = { id: createId(), name: 'My Team', createdAt: Date.now() }
       await db.teams.add(team)
       await enqueueSync('team', team.id)
