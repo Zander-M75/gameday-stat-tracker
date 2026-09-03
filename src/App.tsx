@@ -4,6 +4,7 @@ import { AccountPage } from './pages/AccountPage'
 import { DebugPage } from './pages/DebugPage'
 import { GameDetailPage } from './pages/GameDetailPage'
 import { GamesPage } from './pages/GamesPage'
+import { PlayerSeasonDetailPage } from './pages/PlayerSeasonDetailPage'
 import { RosterPage } from './pages/RosterPage'
 import { SeasonPage } from './pages/SeasonPage'
 import { useSyncEngine } from './sync/useSyncEngine'
@@ -21,6 +22,7 @@ function App() {
         <Route path="/games" element={<GamesPage />} />
         <Route path="/games/:gameId" element={<GameDetailPage />} />
         <Route path="/season" element={<SeasonPage />} />
+        <Route path="/season/:playerId" element={<PlayerSeasonDetailPage />} />
         {/* Not in NAV_ITEMS — reachable via Sidebar/AccountButton, see phase 7 notes in PROGRESS.md. */}
         <Route path="/account" element={<AccountPage />} />
         {/* Dev-only DB dump, not part of the coach-facing nav. */}

@@ -37,7 +37,9 @@ before resuming.
       derived from the full team event log, dense sortable table with
       column-visibility toggles and CSV export (desktop/iPad), stacked
       sort-by cards (phone)
-- [ ] Phase 9b: Per-player season detail view (game-by-game splits)
+- [x] Phase 9b: Per-player season detail view — season totals header plus a
+      game-by-game splits table (desktop/iPad) / stacked cards (phone), each
+      row linking back to its game
 - [ ] Phase 10: Shareable recap graphic
 - [ ] Phase 11: Cross-device pass
 - [ ] Phase 12: Polish and docs
@@ -49,9 +51,44 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 9a is done. Continue straight into phase 9b (per-player season
-detail view) next — no session break scheduled here; the working
+**Phase 9 (9a + 9b) is done. Continue straight into phase 10 (shareable
+recap graphic) next — no session break scheduled here; the working
 agreement's break list (after phase 3, 4d, 8) is already behind us.**
+
+### Phase 9b decisions worth knowing before touching per-player season detail
+
+- **`computePlayerGameSplits` (added to `domain/season.ts`) reuses
+  `computePlayerBoxScore` per game**, same pattern as `computeSeasonBoxScore`
+  reusing it across the whole log — call it with `[player]` and just that
+  game's events (bucketed by `gameId` in one pass over the team's event log)
+  to get one `StatTotals` line per game. A game counts as "relevant" if the
+  player has any event in it OR was in `dressedPlayerIds`, so a
+  dressed-but-scoreless game still shows up as a zeroed row instead of
+  silently vanishing from the log.
+
+- **The splits table has no click-to-sort** (`PlayerGameSplitsTable`,
+  unlike `SeasonTable`/`BoxScoreTable`) — it's a chronological log by
+  design, always most-recent-first, and re-sortable game history isn't
+  something the phase spec asked for. Don't add sorting here reflexively
+  just because the other two tables have it.
+
+- **`PlayerSeasonDetailPage` fetches the same three queries as
+  `SeasonPage`** (`allPlayersForTeam` / `gamesForTeam` / `liveEventsForTeam`)
+  rather than something scoped to one player — there's no per-player Dexie
+  query, and at this app's scale (one team, a season's worth of games)
+  filtering in JS after an unscoped fetch is the same tradeoff `db/queries.ts`
+  already makes elsewhere (see the `isActive`/`deleted` filtering note in
+  `db.ts`). If a future phase needs a real per-player query, add one there,
+  not here.
+
+- **Row/card links use `/games/:gameId`, the existing route from phase 3/4**
+  — there's no new "past game read-only view," clicking through to a game
+  the coach already finished just opens `GameDetailPage` in its normal
+  "Reopen game" state. That was a deliberate non-decision: building a
+  separate read-only recap view wasn't asked for by this phase (phase 10's
+  shareable recap graphic is the actual "look back at a finished game"
+  feature), so this reuses what already exists instead of inventing a
+  parallel screen.
 
 ### Phase 9a decisions worth knowing before touching season stats
 
@@ -108,11 +145,10 @@ agreement's break list (after phase 3, 4d, 8) is already behind us.**
   has its own "sort by" `<select>` standing in for click-to-sort headers,
   since a full 18-column table has nowhere to go at 390px.
 
-- **Routing to a per-player detail view (`/season/:playerId`) is already
-  wired from both `SeasonTable`'s player-name cell and `SeasonPlayerCards`'
-  whole-card link, but the destination page doesn't exist yet** — that's
-  phase 9b. Don't be surprised the link 404s (falls through to the catch-all
-  redirect) until then.
+- **Routing to a per-player detail view (`/season/:playerId`) was wired from
+  both `SeasonTable`'s player-name cell and `SeasonPlayerCards`' whole-card
+  link before the destination page existed** — phase 9b (below) added
+  `PlayerSeasonDetailPage` to complete it.
 
 ### Phase 8 decisions worth knowing before touching sync
 
