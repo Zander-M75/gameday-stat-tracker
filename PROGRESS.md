@@ -70,9 +70,13 @@ rules) need a real pass:
 - Exercise a full game on a real phone: record a full four-quarter game,
   close the app, restart the device, confirm the data survived (phase 6
   asked for this explicitly and it was never done).
-- Set up a real Supabase project and confirm sync actually works end to
-  end, including a real conflict (phases 7/8 were never run against a live
-  backend).
+- ~~Set up a real Supabase project and confirm sync actually works end to
+  end~~ — **done 2026-09-03**, against a live project. Found and fixed two
+  real bugs in the process (see "Phase 8 live-verification" below). Still
+  outstanding: a real *conflict* (two tabs/devices editing the same record)
+  has not been forced yet — the sync path itself is now proven, but the
+  conflict-resolution triggers in `0002_sync_conflict_resolution.sql` still
+  haven't actually fired against live data.
 - Open the recap graphic (phase 10) at real size and check for text overlap
   with a long opponent/player name.
 - Capture the README's screenshots (see its own placeholder section).
@@ -357,21 +361,71 @@ rules) need a real pass:
   link before the destination page existed** — phase 9b (below) added
   `PlayerSeasonDetailPage` to complete it.
 
+### Phase 8 live-verification (2026-09-03) — two real bugs found and fixed
+
+The user created a real Supabase project, ran both migrations, and signed
+in via magic link — the first time any of this ran against a live backend.
+Recording real stat events immediately surfaced persistent 403s on
+`players`/`games`/`stat_events`, then 409s once the first bug was fixed.
+Both turned out to be real bugs, not RLS policy mistakes — the policies
+themselves were correct throughout. All 46 local entities now show a
+non-null `syncedAt` with no `lastError` in `/debug`'s syncQueue table.
+
+1. **The dev seed script bypassed the sync queue entirely.**
+   `src/db/seed.ts` writes team/players/games/statEvents straight to Dexie
+   via `add`/`bulkAdd`, never calling `enqueueSync`. This app is
+   single-team, so *every* real player/game/stat_event ever created
+   references that one team's id as a foreign key — and since the team
+   itself had no `syncQueue` row, it could never sync, so Supabase's RLS
+   check (`team_id in (select id from teams where owner_id = auth.uid())`)
+   always resolved to nothing and rejected every dependent insert with a
+   403. A first fix patched only `getOrCreateTeam()`; a second pass found
+   the same gap applied to seeded players/games/statEvents too (a coach
+   using the seeded roster for a real game hit `stat_events_player_id_fkey`
+   violations the same way). **Fixed generally**: `syncEngine.ts` now has
+   `backfillMissingSyncQueueEntries()`, run at the top of every
+   `flushSyncQueue()` — it scans all four local tables for any id with no
+   `syncQueue` row at all (not "failed to sync," genuinely never enqueued)
+   and enqueues it. This closes the whole class of bug, not just the one
+   instance of it: any future code path that writes to Dexie without going
+   through `db/queries.ts`'s mutation functions would hit the same gap
+   otherwise. Cheap at this app's scale (full four-table scan on every
+   flush, fine for a season's worth of rows) and a no-op once every id has
+   a row.
+
+2. **`SyncQueueItem.lastError` was silently discarding every real error
+   message.** `flushSyncQueue`'s catch block did
+   `error instanceof Error ? error.message : String(error)` — but
+   supabase-js throws `PostgrestError`, a plain object
+   (`message`/`details`/`hint`/`code`), not a native `Error`. `error
+   instanceof Error` was always `false` for it, so every failure's
+   `lastError` was the literal string `"[object Object]"`, useless for
+   diagnosing anything. This bug is *why* the first bug took several rounds
+   to pin down — the actual Postgres error text (e.g. `23503 | insert or
+   update on table "stat_events" violates foreign key constraint
+   "stat_events_player_id_fkey" | Key is not present in table "players".`)
+   was there the whole time, just discarded before it ever reached
+   `/debug`. Fixed with a `describeError()` helper in `syncEngine.ts` that
+   checks for a `message` property on any thrown object, not just
+   `instanceof Error`, and joins `code`/`message`/`details`/`hint` into one
+   readable string.
+
+Both bugs existed since phase 8 was written and could only have been found
+by running against a live backend — exactly the risk this file's "notes for
+resuming" section had been flagging since phase 8's commit.
+
 ### Phase 8 decisions worth knowing before touching sync
 
-- **Nothing here has run against a live Supabase project either** — same
-  caveat as phase 7, compounded: the sync engine has only ever been verified
-  by `npm run build`/lint passing and a careful read-through, never against
-  real network calls, real RLS policies, or the two conflict-resolution
-  triggers actually firing. Before trusting this phase, the user needs to
-  (in order): finish the phase 7 setup steps (project, migration 1, `.env`,
-  auth redirect URLs) if not already done, then also run
-  `supabase/migrations/0002_sync_conflict_resolution.sql`, then exercise it
-  for real — sign in on `/account`, record some stat events, and check the
-  Supabase table editor to confirm rows actually land, then specifically try
-  to reproduce a conflict (edit the same player from two tabs, or flip
-  offline/online mid-game) to confirm the triggers behave as documented
-  rather than just trusting the SQL reads correctly.
+- **Update, 2026-09-03: this has now run against a live Supabase project** —
+  see "Phase 8 live-verification" above for the two real bugs that surfaced
+  and were fixed. The push path (queue → flush → RLS → land in Postgres) is
+  now proven end to end, not just compiled. What's *still* unverified: the
+  two conflict-resolution triggers (`reject_stale_update`,
+  `merge_stat_event_delete`) have never actually fired against live data —
+  nothing so far has exercised two writers touching the same row. To close
+  that out: reproduce a conflict for real (edit the same player from two
+  tabs, or flip offline/online mid-game) and confirm the triggers behave as
+  documented rather than just trusting the SQL reads correctly.
 
 - **The queue is a local outbox keyed by entity, not by write.** `enqueueSync`
   (`src/sync/queue.ts`) upserts one `syncQueue` row per `(entityType,
