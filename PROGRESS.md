@@ -27,7 +27,9 @@ before resuming.
 - [x] Phase 6: PWA and offline hardening — vite-plugin-pwa (autoUpdate),
       generated app icon set (manifest + maskable + apple-touch), offline
       indicator, app-shell precaching with SPA offline fallback
-- [ ] Phase 7: Supabase schema and auth
+- [x] Phase 7: Supabase schema and auth — Postgres schema + RLS mirroring the
+      local Dexie tables, magic-link auth via a non-gating `/account` screen.
+      No sync yet.
 - [ ] Phase 8: Sync engine
 - [ ] Phase 9: Season aggregation
 - [ ] Phase 10: Shareable recap graphic
@@ -41,9 +43,74 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 6 is done. No session break here — continuing straight through to
-phase 7 (Supabase schema/auth), and stopping after phase 8 (sync engine) per
-the working agreement.**
+**Phase 7 is done. No session break here — continuing straight through to
+phase 8 (sync engine), then stopping for the working agreement's session
+break.**
+
+### Phase 7 decisions worth knowing before touching Supabase/auth
+
+- **There is no live Supabase project behind any of this yet, and I can't
+  create one.** That requires an account/dashboard the user owns. Everything
+  in this phase was written and verified as far as `npm run build` can verify
+  it (compiles, `supabase-js` client constructs correctly when env vars are
+  present); the actual schema was never run against a real database. Before
+  phase 8 starts touching sync, the user needs to: create a Supabase project,
+  run `supabase/migrations/0001_init.sql` against it (SQL editor or
+  `supabase db push`), copy the project's URL + anon key from Settings > API
+  into a local `.env` (from `.env.example`, which is committed;
+  `.env` itself is gitignored), and in Auth settings add whatever URL(s) the
+  app will actually run on (`http://localhost:5173` for dev, the Vercel
+  domain once deployed) to the redirect allow-list — magic-link emails will
+  silently fail to log the user in if that's not configured, since
+  `emailRedirectTo` in `AuthProvider.tsx` is set to `window.location.origin`
+  and Supabase rejects redirects not on that list.
+
+- **Auth is additive, never a gate.** `AuthProvider` (`src/auth/`) wraps the
+  whole app in `main.tsx` (outermost, alongside `ThemeProvider`/
+  `ToastProvider`), but nothing downstream checks `status` to block
+  rendering — `/account` is the only screen that reads it. This matches
+  CLAUDE.md's offline-first rule taken to its logical conclusion: the app
+  must work with no network _and_ with no cloud project configured at all.
+  `supabase` (`src/supabase/client.ts`) is `null` in that unconfigured case
+  rather than throwing, and `AuthProvider`/`AccountPage` both branch on that
+  (`status: 'unconfigured'`) instead of assuming credentials exist. Phase 8
+  should keep this shape — sync being unavailable should degrade the same
+  way, never crash a screen that doesn't care about sync.
+
+- **`/account` is a real route but deliberately not in `NAV_ITEMS`** — phase
+  0 fixed the primary nav to exactly Roster/Games/Season, and account/auth
+  doesn't belong there. It's reachable via a small "Account" link at the
+  bottom of `Sidebar` (next to `ThemeToggle`) on iPad-landscape+, and via a
+  new floating `AccountButton` (`src/components/layout/AccountButton.tsx`,
+  fixed top-left, 56px per the touch target rule) on phone/iPad-portrait,
+  where there's no sidebar to tuck a link into. `AccountButton` only renders
+  in `AppShell`'s non-`isDesktopNav` branch — don't render both at once, or
+  there'd be two entry points on some breakpoint.
+
+- **The cloud schema isn't a literal type-for-type mirror of
+  `src/db/types.ts`**, just a structural/relationship one, per the phase
+  spec's own wording ("mirroring the local schema"). Two deliberate
+  deviations, both explained in comments at the top of
+  `supabase/migrations/0001_init.sql`: (1) `teams.owner_id` — the local app
+  has nothing like it (one IndexedDB per device, inherently single-user),
+  but RLS needs something to check `auth.uid()` against, so every other
+  table's policy walks the ownership chain back up through `team_id`/
+  `game_id` instead of duplicating `owner_id` everywhere; (2) epoch-ms
+  numbers (`date`, `createdAt`, `updatedAt`, `timestamp`) became `timestamptz`
+  columns — storing raw epoch-ms in Postgres would be unidiomatic and lose
+  proper date functions/timezone handling, and phase 8's sync engine is
+  already going to need a camelCase-local ↔ snake_case-cloud field mapping
+  layer, so converting epoch-ms ↔ timestamptz belongs in that same layer, not
+  here.
+
+- **`stat_events.id` has no default** (unlike `teams`/`players`/`games`,
+  which use `gen_random_uuid()`) — it's client-generated locally
+  (`src/db/id.ts`) specifically so phase 8's upserts are idempotent by id;
+  don't add a server-side default here, that would defeat the point.
+
+- **`sync_queue` (the local `SyncQueueItem` table) has no cloud
+  counterpart** — it's a local-only outbox of pending pushes, and syncing
+  _it_ was never the goal; only the four data tables it points at get mirrored.
 
 ### Phase 6 decisions worth knowing before touching PWA/offline
 

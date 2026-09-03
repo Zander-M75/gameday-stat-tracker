@@ -53,3 +53,12 @@ export function MoonIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+
+export function AccountIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path strokeLinecap="round" d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7" />
+    </svg>
+  )
+}

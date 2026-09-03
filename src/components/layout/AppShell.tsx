@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { AccountButton } from './AccountButton'
 import { BottomTabBar } from './BottomTabBar'
 import { OfflineIndicator } from './OfflineIndicator'
 import { Sidebar } from './Sidebar'
@@ -11,7 +12,8 @@ import { Sidebar } from './Sidebar'
  *
  * `OfflineIndicator` is `fixed`-positioned and renders nothing while online,
  * so it's mounted once here, above the branch, rather than duplicated inside
- * both.
+ * both. `AccountButton` only renders in the non-sidebar branch — `Sidebar`
+ * already has its own Account link, so this avoids a second entry point.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { isDesktopNav } = useBreakpoint()
@@ -26,6 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       ) : (
         <div className="flex h-dvh w-dvw flex-col overflow-hidden">
+          <AccountButton />
           <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
           <BottomTabBar />
         </div>

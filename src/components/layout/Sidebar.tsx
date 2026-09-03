@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { AccountIcon } from '../icons'
 import { NAV_ITEMS } from './nav-items'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -28,6 +29,25 @@ export function Sidebar() {
           </NavLink>
         ))}
       </div>
+      {/*
+        Account isn't in NAV_ITEMS — phase 0 fixed the nav to exactly
+        Roster/Games/Season, and auth (phase 7) is additive, not a fourth
+        primary destination. It lives here instead, next to the other
+        account-ish control (ThemeToggle).
+      */}
+      <NavLink
+        to="/account"
+        className={({ isActive }) =>
+          `flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm mb-1 ${
+            isActive
+              ? 'bg-surface-overlay text-accent'
+              : 'text-text-muted hover:bg-surface-overlay hover:text-text'
+          }`
+        }
+      >
+        <AccountIcon className="size-4" />
+        Account
+      </NavLink>
       <ThemeToggle />
     </nav>
   )
