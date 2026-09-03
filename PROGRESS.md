@@ -46,7 +46,10 @@ before resuming.
 - [x] Phase 11: Cross-device pass — static audit at 390/768/1024/1440px
       (touch targets, overflow, keyboard-shortcut scoping, nav exclusivity);
       fixed 8 files with sub-56px touch targets on touch breakpoints
-- [ ] Phase 12: Polish and docs
+- [x] Phase 12: Polish and docs — error boundary (route-scoped, nav survives
+      a crash), a "game not found" fix for a stale/bad URL, a full README
+      (setup, architecture, event-log rationale); screenshots still
+      outstanding, see notes below
 
 ## Session breaks
 
@@ -55,8 +58,68 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 11 is done. Continue straight into phase 12 (polish and docs)
-next — the final phase, no session break scheduled here.**
+**All twelve phases are done. There's no phase 13 — what's left is
+verification, not more building.**
+
+Before trusting this app for a real game, the things that could only be
+checked by static review (not a running browser, per CLAUDE.md's command
+rules) need a real pass:
+
+- Actually resize/DevTools-test the app at 390/768/1024/1440px (phase 11
+  was a code audit, not a visual one — see its notes below).
+- Exercise a full game on a real phone: record a full four-quarter game,
+  close the app, restart the device, confirm the data survived (phase 6
+  asked for this explicitly and it was never done).
+- Set up a real Supabase project and confirm sync actually works end to
+  end, including a real conflict (phases 7/8 were never run against a live
+  backend).
+- Open the recap graphic (phase 10) at real size and check for text overlap
+  with a long opponent/player name.
+- Capture the README's screenshots (see its own placeholder section).
+
+### Phase 12 decisions worth knowing before touching polish/error-handling
+
+- **New `src/components/ErrorBoundary.tsx`**, a class component (React has
+  no hook-based error boundary API) mounted in `AppShell.tsx` around only
+  `{children}` — the routed page — not the sidebar/bottom-tab chrome around
+  it. That placement is deliberate: if one screen throws, the coach can
+  still tap to a different tab and keep working instead of the whole app
+  going blank. It's keyed by `useLocation().pathname`, which matters more
+  than it looks — without the key, navigating away from a crashed screen
+  would keep showing the frozen fallback UI forever (the boundary's local
+  `error` state doesn't know or care that `children` changed underneath it
+  once it's caught something), since React only re-runs
+  `getDerivedStateFromError` on a genuinely new component instance, not on
+  a prop change to an existing one. Keying by path forces a fresh instance
+  on every navigation.
+
+- **Found and fixed a real gap while auditing loading states**:
+  `GameDetailPage` couldn't tell "the game query is still loading" apart
+  from "this game id doesn't exist" — both cases made `useLiveQuery` return
+  `undefined`, so a stale bookmark or a game deleted on another device
+  before this one's sync caught up would spin on "Loading…" forever with no
+  way out. Fixed using `useLiveQuery`'s (underdocumented but real) third
+  argument — a default value distinct from `undefined` — so `'loading'`
+  and "resolved to nothing" are now different states, and the latter
+  redirects to `/games`. `PlayerSeasonDetailPage` never had this bug,
+  because it loads the full player array and does `.find()` locally, where
+  "loaded but not found" and "still loading" were already naturally
+  distinguishable (`undefined` array vs. an array that just doesn't contain
+  a match).
+
+- **Empty and loading states elsewhere were audited, not rewritten** — every
+  list-driven screen already had a real empty-state message from the phase
+  that built it (`RosterPage`, `GamesPage`, `SeasonPage`,
+  `PlayerSeasonDetailPage`, `BoxScoreTable`, `EventFeed`, the player
+  pickers), and every data-dependent page already gated on `undefined` with
+  a "Loading…" fallback before this phase touched anything. No gaps found
+  there beyond the one above.
+
+- **Screenshots were not captured** — this session never had a browser
+  available (CLAUDE.md's command-execution rules block `npm run dev`), so
+  the README's screenshots section is a placeholder with instructions
+  instead of actual images. This is the one sub-item of phase 12 that
+  couldn't be done from here at all, not a corner that was cut.
 
 ### Phase 11 decisions worth knowing before touching layout/breakpoints
 

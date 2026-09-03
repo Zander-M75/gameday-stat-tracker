@@ -14,10 +14,19 @@ type GameTab = 'entry' | 'box'
 
 export function GameDetailPage() {
   const { gameId } = useParams<{ gameId: string }>()
-  const game = useLiveQuery(() => (gameId ? getGame(gameId) : undefined), [gameId])
+  // `getGame` legitimately resolves to `undefined` for a bad/deleted id —
+  // the same value `useLiveQuery` returns while still loading. A distinct
+  // default (its third argument) tells the two apart, so a stale link
+  // redirects instead of showing "Loading…" forever.
+  const game = useLiveQuery(
+    () => (gameId ? getGame(gameId) : undefined),
+    [gameId],
+    'loading' as const,
+  )
+  const resolvedGame = game === 'loading' ? undefined : game
   const players = useLiveQuery(
-    () => (game ? allPlayersForTeam(game.teamId) : undefined),
-    [game?.teamId],
+    () => (resolvedGame ? allPlayersForTeam(resolvedGame.teamId) : undefined),
+    [resolvedGame?.teamId],
   )
   const events =
     useLiveQuery(() => (gameId ? liveEventsForGame(gameId) : undefined), [gameId]) ?? []
@@ -29,13 +38,15 @@ export function GameDetailPage() {
 
   if (!gameId) return <Navigate to="/games" replace />
 
-  if (game === undefined || players === undefined) {
+  if (game === 'loading' || players === undefined) {
     return (
       <div className="flex min-h-full items-center justify-center p-8">
         <p className="text-text-muted">Loading…</p>
       </div>
     )
   }
+
+  if (!game) return <Navigate to="/games" replace />
 
   const dressed = players
     .filter((p) => game.dressedPlayerIds.includes(p.id))
