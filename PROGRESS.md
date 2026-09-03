@@ -21,7 +21,9 @@ before resuming.
       landscape adds feed as a third column, portrait stacks it below
 - [x] Phase 4d: Desktop stat entry layout — three panes, jersey-number +
       letter-key keyboard entry, Cmd/Ctrl+Z undo, dismissible shortcut hints
-- [ ] Phase 5: Live box score
+- [x] Phase 5: Live box score — per-player table + team totals derived live
+      from the event log, save %/faceoff % called out prominently, sortable
+      columns, phone tab vs. always-visible on iPad/desktop
 - [ ] Phase 6: PWA and offline hardening
 - [ ] Phase 7: Supabase schema and auth
 - [ ] Phase 8: Sync engine
@@ -37,8 +39,66 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 4d is done — this is the working agreement's session break. Start a
-fresh session before phase 5 (live box score).**
+**Phase 5 is done. No session break here — continuing straight through to
+phase 6 (PWA/offline), phase 7 (Supabase schema/auth), and stopping after
+phase 8 (sync engine) per the working agreement.**
+
+### Phase 5 decisions worth knowing before touching the box score
+
+- **New `src/domain/boxScore.ts`** is the derivation layer, same philosophy
+  as `score.ts`/`quarter.ts` — nothing is stored, everything is recomputed
+  from the live event log on every call. `computePlayerBoxScore(players,
+  events)` returns one `PlayerBoxScoreLine` per player (roster fields +
+  `StatTotals`); `computeTeamBoxScore(lines, events)` sums those lines and
+  adds the team-level clear stats (which have no per-player attribution).
+
+- **`shot` / `shot_on_goal` / `goal` roll back up into a hierarchy at read
+  time**, per the phase 4a note on `PlayerEventType`: the coach taps whichever
+  outcome they actually saw (missed / saved-or-blocked / scored) as one
+  event, never three. So `totalsFromTally` in `boxScore.ts` computes
+  `shotsOnGoal = shot_on_goal + goal` and `shots = shot + shotsOnGoal` —
+  don't add separate recording buttons for "every shot is also on goal," the
+  math already accounts for it.
+
+- **Percentage fields are `number | null`, never `0` for a zero-attempt
+  denominator** — `pct()` returns `null` and `formatPct()` renders that as
+  "–". Any new stat card or column should reuse `formatPct`, not
+  `Math.round(x * 100)` inline, or a goalie with 0 shots faced will show a
+  misleading 0% instead of a dash.
+
+- **Box score is computed against `dressedPlayers` only**, same roster
+  GameDetailPage already derives for `StatEntryPanel` — not `allPlayers`.
+  Matches the existing convention rather than inventing a second filter.
+
+- **New components, all in `src/components/box-score/`**: `BoxScorePanel`
+  (composes the two below, takes `dressedPlayers` + `events` as props — no
+  query of its own), `BoxScoreSummary` (the two large Save %/Faceoff % cards
+  the spec calls out as "asked about between quarters," plus a compact
+  strip of the remaining team totals), `BoxScoreTable` (sortable, click a
+  header to sort/flip direction, `overflow-x-auto` wrapper so a phone
+  scrolls the table horizontally instead of squeezing 15 columns into
+  390px — deliberately not a card-list rewrite for narrow widths, since the
+  spec's "not a stretched mobile card list" line is about not reusing a
+  cramped layout at desktop width, not a mandate to build a second
+  card-based presentation for phone).
+
+- **`GameDetailPage` now runs its own `liveEventsForGame` query** in
+  addition to the one already inside `StatEntryPanel` — a second live
+  subscription to the same table rather than threading events down as a
+  prop, so `StatEntryPanel`'s internals (flagged high-risk-ish by how central
+  it is) didn't need to change at all. Slight query duplication, no
+  correctness cost.
+
+- **Phone gets a tab switcher (`GameTabButton`, local to
+  `GameDetailPage.tsx`) between "Stat entry" and "Box score"; `md` and up
+  render both unconditionally, stacked** (box score below stat entry, full
+  width) rather than squeezed into a side column — the existing iPad/desktop
+  stat-entry layouts already use all available horizontal space for their
+  own panes (grid+buttons+feed), so a box score table that actually needs
+  width to be "genuinely readable" belongs below, not wedged into what would
+  become a fourth cramped column. The page-level scroll this relies on is
+  the same pattern phase 4c already established for iPad ("the whole page
+  scrolls together in `main`"), so this isn't a new assumption.
 
 ### Phase 4d decisions worth knowing before touching stat entry
 
