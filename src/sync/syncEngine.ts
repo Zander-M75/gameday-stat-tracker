@@ -10,6 +10,22 @@ const TABLE_FOR: Record<SyncEntityType, string> = {
   statEvent: 'stat_events',
 }
 
+/**
+ * Supabase-js throws `PostgrestError` — a plain object (`message`/`details`/
+ * `hint`/`code`), not a native `Error` — so a naive `error instanceof Error`
+ * check falls through to `String(error)`, which stringifies any plain object
+ * as the useless "[object Object]". Pull the real Postgres error text out
+ * instead, so `SyncQueueItem.lastError` is actually diagnosable.
+ */
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message, details, hint, code } = error as Record<string, unknown>
+    return [code, message, details, hint].filter(Boolean).join(' | ')
+  }
+  return String(error)
+}
+
 let isSyncing = false
 const listeners = new Set<() => void>()
 
@@ -72,7 +88,7 @@ export async function flushSyncQueue(): Promise<void> {
       } catch (error) {
         await db.syncQueue.update(item.id, {
           attempts: item.attempts + 1,
-          lastError: error instanceof Error ? error.message : String(error),
+          lastError: describeError(error),
         })
         // Keep going — one bad row shouldn't block the rest of the queue.
       }
