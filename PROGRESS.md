@@ -24,7 +24,9 @@ before resuming.
 - [x] Phase 5: Live box score — per-player table + team totals derived live
       from the event log, save %/faceoff % called out prominently, sortable
       columns, phone tab vs. always-visible on iPad/desktop
-- [ ] Phase 6: PWA and offline hardening
+- [x] Phase 6: PWA and offline hardening — vite-plugin-pwa (autoUpdate),
+      generated app icon set (manifest + maskable + apple-touch), offline
+      indicator, app-shell precaching with SPA offline fallback
 - [ ] Phase 7: Supabase schema and auth
 - [ ] Phase 8: Sync engine
 - [ ] Phase 9: Season aggregation
@@ -39,16 +41,80 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 5 is done. No session break here — continuing straight through to
-phase 6 (PWA/offline), phase 7 (Supabase schema/auth), and stopping after
-phase 8 (sync engine) per the working agreement.**
+**Phase 6 is done. No session break here — continuing straight through to
+phase 7 (Supabase schema/auth), and stopping after phase 8 (sync engine) per
+the working agreement.**
+
+### Phase 6 decisions worth knowing before touching PWA/offline
+
+- **Manual device verification is still outstanding and can't be done from
+  here.** CLAUDE.md's command execution rules block running `npm run dev` or
+  any long-lived server, so nothing in this phase could be exercised in an
+  actual browser. What's been verified is everything checkable from a one-shot
+  `npm run build`: the service worker and manifest generate, the precache list
+  (`dist/sw.js`) includes the JS/CSS bundles, `index.html`, all icon PNGs, and
+  a `NavigationRoute` SPA fallback to `index.html`. Still needed from the
+  user, by hand, before trusting this phase: iOS Safari add-to-home-screen,
+  iPadOS add-to-home-screen, desktop Chrome's install prompt, devtools
+  "offline" with a hard reload from cold start, and the phone/iPad
+  restart-and-reopen data-persistence check the phase spec calls for
+  separately on each. Don't mark those sub-items done from code review alone.
+
+- **Icons are generated, not hand-designed** — `public/icons/*.png` came from
+  a one-off pure-Node PNG encoder (no image library, no native deps) that was
+  run once and discarded; it's not part of the repo. The mark is a gold ring
+  of gauge ticks around a ball on the app's own dark/gold palette
+  (`--color-surface`/`--color-accent` from `index.css`), sized for: `icon-192`
+  - `icon-512` (manifest, `purpose: any`), `maskable-icon-512` (manifest,
+    `purpose: maskable`, content padded inside the safe-zone circle since
+    Android crops these), and three `apple-touch-icon-*` (152/167/180 — iOS/
+    iPadOS Safari ignores the manifest entirely for add-to-home-screen and only
+    reads `<link rel="apple-touch-icon">` tags in `index.html`, added by hand
+    since `vite-plugin-pwa` doesn't inject those). If the app ever gets a real
+    designed logo, regenerate all six sizes from it rather than hand-editing
+    the generated set — the maskable one in particular needs the safe-zone
+    padding preserved or Android's circular crop will clip it.
+
+- **`registerType: 'autoUpdate'`** (`vite.config.ts`), not `'prompt'` — a new
+  service worker activates silently on next load instead of interrupting the
+  coach with an update dialog mid-game. This is the same "never let
+  infrastructure interrupt stat entry" principle CLAUDE.md states explicitly
+  for phase 8's sync engine; applying it here now means phase 8 doesn't have
+  to re-litigate it.
+
+- **`workbox.globPatterns` only covers the built app shell**
+  (`**/*.{js,css,html,svg,png,ico,woff2}` in `dist/`) — there's no
+  `runtimeCaching` config yet because there's no network API to call yet.
+  Phase 7/8 adding Supabase means real network requests will exist; if any of
+  those need offline fallback behavior beyond "the write already landed in
+  IndexedDB and syncs later" (e.g. an image, a remote font), that's the point
+  to add `runtimeCaching` entries — don't assume precaching alone will still
+  be enough once there's a backend.
+
+- **`OfflineIndicator` (`src/components/layout/OfflineIndicator.tsx`) reads
+  `navigator.onLine` via a new `useOnlineStatus` hook**
+  (`src/hooks/useOnlineStatus.ts`, same `useSyncExternalStore` shape as
+  `useBreakpoint`) — this is device network-interface state, _not_ whether
+  Supabase is actually reachable. Phase 8's sync status indicator is a
+  separate, more meaningful signal ("is my data getting to the cloud") and
+  should not be merged into this component or hook; they answer different
+  questions and CLAUDE.md asks for both independently (offline indicator here
+  in phase 6, sync status "visible but not intrusive" in phase 8).
+
+- **`OfflineIndicator` mounts once in `AppShell`, above the sidebar/bottom-tab
+  branch**, not duplicated inside both — it's `fixed`-positioned and renders
+  `null` while online, so it doesn't care which nav branch is active.
+  `AppShell`'s return became a fragment wrapping the existing branch rather
+  than two full copies of the indicator. If a later phase adds more
+  always-present chrome (phase 8's sync indicator is the obvious next one),
+  put it here too rather than threading it into both branches separately.
 
 ### Phase 5 decisions worth knowing before touching the box score
 
 - **New `src/domain/boxScore.ts`** is the derivation layer, same philosophy
   as `score.ts`/`quarter.ts` — nothing is stored, everything is recomputed
   from the live event log on every call. `computePlayerBoxScore(players,
-  events)` returns one `PlayerBoxScoreLine` per player (roster fields +
+events)` returns one `PlayerBoxScoreLine` per player (roster fields +
   `StatTotals`); `computeTeamBoxScore(lines, events)` sums those lines and
   adds the team-level clear stats (which have no per-player attribution).
 
@@ -114,7 +180,7 @@ phase 8 (sync engine) per the working agreement.**
   selection concept.** `DesktopStatEntryLayout` keeps a local
   `jerseyBuffer` string (sliding last-2-digits-typed window, no Enter
   needed); on every digit keystroke it looks up a dressed player whose
-  `jerseyNumber` matches the buffer and calls a *new* `onMatchPlayer`
+  `jerseyNumber` matches the buffer and calls a _new_ `onMatchPlayer`
   handler (`handleMatchPlayer` in `StatEntryPanel` — direct-set, not
   toggle) to update the exact same `selectedPlayerId` state phone/iPad use.
   A letter keypress that matches a `PLAYER_STAT_BUTTONS` key then just calls
@@ -196,7 +262,7 @@ phase 8 (sync engine) per the working agreement.**
 - **`StatEntryPanel` now clears `selectedPlayerId` right after a stat or
   penalty is recorded** (`handleStat`, `handlePenaltyConfirm` in
   `StatEntryPanel.tsx`), not just on explicit deselect. This is what makes
-  "two taps: tap player, tap stat" actually mean two taps *per event* instead
+  "two taps: tap player, tap stat" actually mean two taps _per event_ instead
   of leaving a player pinned — phase 4c's spec text ("still two taps, but
   nothing swaps out from under you") assumes the same reset-after-record
   behavior, just without the screen swap, so don't special-case this to
