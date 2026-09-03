@@ -1,6 +1,6 @@
 import { db } from './db'
 import { createId } from './id'
-import type { Player, Position, StatEvent, Team } from './types'
+import type { Game, GameStatus, Player, Position, StatEvent, Team } from './types'
 
 /**
  * `isActive`/`deleted` aren't indexed (see db.ts) — these helpers do the
@@ -89,4 +89,39 @@ export async function bulkAddPlayers(teamId: string, inputs: NewPlayerInput[]): 
     updatedAt: now,
   }))
   await db.players.bulkAdd(players)
+}
+
+/** Most recent first — the natural order for both the in-progress and past-games lists. */
+export async function gamesForTeam(teamId: string): Promise<Game[]> {
+  const games = await db.games.where('teamId').equals(teamId).sortBy('date')
+  return games.reverse()
+}
+
+export function getGame(id: string): Promise<Game | undefined> {
+  return db.games.get(id)
+}
+
+export interface NewGameInput {
+  opponentName: string
+  date: number
+  isHome: boolean
+  dressedPlayerIds: string[]
+}
+
+export async function createGame(teamId: string, input: NewGameInput): Promise<Game> {
+  const now = Date.now()
+  const game: Game = {
+    id: createId(),
+    teamId,
+    ...input,
+    status: 'in_progress',
+    createdAt: now,
+    updatedAt: now,
+  }
+  await db.games.add(game)
+  return game
+}
+
+export async function setGameStatus(id: string, status: GameStatus): Promise<void> {
+  await db.games.update(id, { status, updatedAt: Date.now() })
 }
