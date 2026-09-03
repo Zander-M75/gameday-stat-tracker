@@ -72,11 +72,16 @@ rules) need a real pass:
   asked for this explicitly and it was never done).
 - ~~Set up a real Supabase project and confirm sync actually works end to
   end~~ — **done 2026-09-03**, against a live project. Found and fixed two
-  real bugs in the process (see "Phase 8 live-verification" below). Still
-  outstanding: a real *conflict* (two tabs/devices editing the same record)
-  has not been forced yet — the sync path itself is now proven, but the
-  conflict-resolution triggers in `0002_sync_conflict_resolution.sql` still
-  haven't actually fired against live data.
+  real bugs in the process (see "Phase 8 live-verification" below).
+- ~~Confirm the conflict-resolution triggers actually fire correctly~~ —
+  **done 2026-09-03**, via direct SQL against the live project (see "Phase 8
+  conflict-trigger verification" below). Both `reject_stale_update` and
+  `merge_stat_event_delete` behaved exactly as their comments claim. This
+  proved the trigger logic itself, not a full two-device race through the
+  app's own sync engine — that's a real scenario still worth trying
+  eventually (two browser contexts signed in as the same coach, editing the
+  same player), but the SQL test is the deterministic version of the same
+  question and it passed.
 - Open the recap graphic (phase 10) at real size and check for text overlap
   with a long opponent/player name.
 - Capture the README's screenshots (see its own placeholder section).
@@ -413,6 +418,41 @@ non-null `syncedAt` with no `lastError` in `/debug`'s syncQueue table.
 Both bugs existed since phase 8 was written and could only have been found
 by running against a live backend — exactly the risk this file's "notes for
 resuming" section had been flagging since phase 8's commit.
+
+### Phase 8 conflict-trigger verification (2026-09-03)
+
+With the push path proven, the last open question from phase 8's own notes
+was whether the two conflict-resolution triggers in
+`supabase/migrations/0002_sync_conflict_resolution.sql` actually behave as
+their comments claim, since they'd never fired against live data. Tested
+directly with raw SQL in the Supabase SQL editor against real rows (a real
+player, a real stat_event) rather than trying to race two client writers
+against each other, since the trigger contract is really a claim about
+Postgres behavior independent of how the conflicting writes arrive:
+
+```sql
+-- reject_stale_update (players/games)
+update players set first_name = 'NEWER', updated_at = now() where id = '<id>';
+update players set first_name = 'STALE_SHOULD_BE_REJECTED', updated_at = now() - interval '1 hour' where id = '<id>';
+select first_name, updated_at from players where id = '<id>';
+-- => first_name still 'NEWER' — the stale write was rejected, not applied.
+
+-- merge_stat_event_delete (stat_events)
+update stat_events set deleted = true where id = '<id>';
+update stat_events set deleted = false where id = '<id>';
+select deleted from stat_events where id = '<id>';
+-- => deleted still true — the delete could not be undone by a later write.
+```
+
+Both passed exactly as documented. This confirms the trigger SQL itself is
+correct — what it doesn't cover is a full two-device race through the app's
+actual sync engine (two browser contexts signed in as the same coach,
+editing the same player concurrently, watching `flushSyncQueue` resolve it).
+That's a real scenario still worth trying if it ever matters in practice,
+but since the trigger logic is what determines the outcome regardless of
+network arrival order, the SQL test above is the deterministic version of
+the same question, and it's the reason to trust the *documented* behavior
+now rather than just the code reading correctly.
 
 ### Phase 8 decisions worth knowing before touching sync
 
