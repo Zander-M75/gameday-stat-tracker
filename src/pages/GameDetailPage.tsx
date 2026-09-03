@@ -2,10 +2,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { BoxScorePanel } from '../components/box-score/BoxScorePanel'
+import { RecapPanel } from '../components/recap/RecapPanel'
 import { StatEntryPanel } from '../components/stat-entry/StatEntryPanel'
 import { allPlayersForTeam, getGame, liveEventsForGame, setGameStatus } from '../db/queries'
 import { formatGameDate } from '../domain/formatDate'
+import { computeRecapData } from '../domain/recap'
 import { useBreakpoint } from '../hooks/useBreakpoint'
+import { useTeam } from '../hooks/useTeam'
 
 type GameTab = 'entry' | 'box'
 
@@ -18,9 +21,11 @@ export function GameDetailPage() {
   )
   const events =
     useLiveQuery(() => (gameId ? liveEventsForGame(gameId) : undefined), [gameId]) ?? []
+  const team = useTeam()
   const { isAtLeast } = useBreakpoint()
   const isPhone = !isAtLeast('md')
   const [tab, setTab] = useState<GameTab>('entry')
+  const [showRecap, setShowRecap] = useState(false)
 
   if (!gameId) return <Navigate to="/games" replace />
 
@@ -51,16 +56,29 @@ export function GameDetailPage() {
             {game.status === 'in_progress' ? 'In progress' : 'Final'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            void setGameStatus(game.id, game.status === 'in_progress' ? 'final' : 'in_progress')
-          }
-          className="flex min-h-14 items-center rounded-md border border-border px-4 text-sm font-semibold text-text"
-        >
-          {game.status === 'in_progress' ? 'Mark final' : 'Reopen game'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowRecap((v) => !v)}
+            className="flex min-h-14 items-center rounded-md border border-border px-4 text-sm font-semibold text-text"
+          >
+            {showRecap ? 'Close recap' : 'Share recap'}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void setGameStatus(game.id, game.status === 'in_progress' ? 'final' : 'in_progress')
+            }
+            className="flex min-h-14 items-center rounded-md border border-border px-4 text-sm font-semibold text-text"
+          >
+            {game.status === 'in_progress' ? 'Mark final' : 'Reopen game'}
+          </button>
+        </div>
       </div>
+
+      {showRecap && team && (
+        <RecapPanel data={{ ...computeRecapData(game, dressed, events), teamName: team.name }} />
+      )}
 
       {dressed.length === 0 && (
         <p className="text-sm text-text-muted">

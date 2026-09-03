@@ -40,7 +40,9 @@ before resuming.
 - [x] Phase 9b: Per-player season detail view — season totals header plus a
       game-by-game splits table (desktop/iPad) / stacked cards (phone), each
       row linking back to its game
-- [ ] Phase 10: Shareable recap graphic
+- [x] Phase 10: Shareable recap graphic — canvas-rendered PNG (final score,
+      W/L badge, top 3 performers), Download everywhere, Web Share API
+      share on devices that support file attachments
 - [ ] Phase 11: Cross-device pass
 - [ ] Phase 12: Polish and docs
 
@@ -51,9 +53,74 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 9 (9a + 9b) is done. Continue straight into phase 10 (shareable
-recap graphic) next — no session break scheduled here; the working
-agreement's break list (after phase 3, 4d, 8) is already behind us.**
+**Phase 10 is done. Continue straight into phase 11 (cross-device pass)
+next — no session break scheduled here; the working agreement's break list
+(after phase 3, 4d, 8) is already behind us.**
+
+### Phase 10 decisions worth knowing before touching the recap graphic
+
+- **Nothing here has been visually verified in a real browser.** CLAUDE.md's
+  command execution rules block `npm run dev`, so the canvas layout in
+  `domain/recapImage.ts` was hand-computed (row heights, baseline offsets,
+  the gap between the score row and the name row above it) and checked for
+  arithmetic consistency, not eyeballed. `npm run build`/lint/format all
+  pass, which only proves it compiles — before trusting this phase, open a
+  game with some recorded stats, click "Share recap," and actually look at
+  the rendered canvas at real size for overlap or clipping, especially with
+  a long opponent name or a player with a long last name (the
+  `fitFontSize` shrink-to-fit helper is exercised there, but capped at a
+  22px floor with no wrapping, so a truly long name will still visually
+  crowd its row).
+
+- **Split into three files on purpose**: `domain/recap.ts` (pure data —
+  `computeRecapData` derives score + top-3-by-points performers from the
+  event log, same derive-don't-store rule as everything else),
+  `domain/recapImage.ts` (pure canvas drawing, no React, no DOM beyond the
+  `HTMLCanvasElement` it's handed), `components/recap/RecapPanel.tsx` (the
+  React wrapper — owns the `<canvas>` ref, re-renders it in a `useEffect` on
+  `data` change, and adds Download/Share buttons below it). Keeping the
+  canvas math out of the component means it could be unit-tested standalone
+  later without a DOM, if that ever becomes worth doing.
+
+- **Top performers are the top 3 dressed players by points (goals +
+  assists), zero-point players excluded** — not configurable, not
+  positional (a shutdown defenseman with a goal and no other offensive
+  stats would show up ahead of a goalie with a great save percentage, since
+  "top performers" reads as points-based in the spec's own wording, not
+  "one per category"). If a coach wants goalie/FOGO performance called out
+  too, that's a real feature request to take back to the user, not
+  something to guess at.
+
+- **The share button is gated by feature detection
+  (`RecapPanel.tsx`'s `supportsFileShare`), not by device/breakpoint** —
+  `navigator.canShare({ files: [...] })` is the documented way to check
+  whether the Web Share API on this browser accepts a file attachment
+  before offering the button, since `navigator.share` exists on some
+  desktop browsers but rejects files there. This will naturally hide the
+  Share button on desktop Chrome/Firefox and show it on iOS/Android/Safari,
+  without hand-coding a user-agent or breakpoint check — the phase spec's
+  "via the Web Share API on mobile" is satisfied by feature detection
+  doing the right thing, not by gating on `useBreakpoint()`.
+
+- **Download works everywhere, including desktop** — `canvas.toBlob` +
+  `URL.createObjectURL` + a synthetic `<a download>` click, same technique
+  `domain/csv.ts` already uses for season CSV export (phase 9a). No new
+  pattern introduced.
+
+- **"Share recap" is not gated on `game.status === 'final'`** — the button
+  is always available on `GameDetailPage`, even mid-game, despite the phase
+  spec's framing ("after a game, generate..."). A coach wanting to text a
+  halftime score to the group chat is a real use case this app already
+  supports for the live box score, and gating the recap button on status
+  would be an arbitrary restriction the spec didn't actually ask for.
+
+- **`RecapPanel` is toggled open/closed the same way `NewGameForm`/
+  `PlayerForm`/`BulkAddPanel` are elsewhere in the app** (a plain
+  `useState<boolean>` + inline panel, not a modal/dialog) — CLAUDE.md's "no
+  modals" rule is scoped to live stat entry specifically, so a modal
+  would've been permissible here, but the toggle-panel pattern is already
+  established throughout the app and there was no reason to introduce a
+  second UI convention for showing/hiding a panel.
 
 ### Phase 9b decisions worth knowing before touching per-player season detail
 
