@@ -22,10 +22,12 @@ import { describeEvent } from '../../domain/eventDescription'
 import { vibrate } from '../../domain/haptics'
 import { currentQuarter } from '../../domain/quarter'
 import { computeScore } from '../../domain/score'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { useToast } from '../../toast/ToastProvider'
 import { AssistPicker } from './AssistPicker'
 import { EventFeed } from './EventFeed'
 import { PenaltyPicker } from './PenaltyPicker'
+import { PhoneStatEntryLayout } from './PhoneStatEntryLayout'
 import { PlayerSelectList } from './PlayerSelectList'
 import { ScoreHeader } from './ScoreHeader'
 import { StatButtonGrid } from './StatButtonGrid'
@@ -54,6 +56,8 @@ interface PendingPenalty {
  */
 export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPanelProps) {
   const { showToast } = useToast()
+  const { isAtLeast } = useBreakpoint()
+  const isPhone = !isAtLeast('md')
   const events = useLiveQuery(() => liveEventsForGame(game.id), [game.id]) ?? []
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
@@ -82,14 +86,19 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
     setSelectedPlayerId((current) => (current === playerId ? null : playerId))
   }
 
+  function handleBackToGrid() {
+    dismissPickers()
+    setSelectedPlayerId(null)
+  }
+
   async function handleStat(type: PlayerEventType) {
     if (!selectedPlayerId) return
     dismissPickers()
-    const event = await announce(
-      recordPlayerEvent({ gameId: game.id, type, playerId: selectedPlayerId, quarter }),
-    )
+    const playerId = selectedPlayerId
+    setSelectedPlayerId(null)
+    const event = await announce(recordPlayerEvent({ gameId: game.id, type, playerId, quarter }))
     if (type === 'goal') {
-      setPendingAssist({ goalEventId: event.id, scorerId: selectedPlayerId })
+      setPendingAssist({ goalEventId: event.id, scorerId: playerId })
     }
   }
 
@@ -116,6 +125,7 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
   async function handlePenaltyConfirm(duration: PenaltyDurationSeconds, releasable: boolean) {
     const pending = pendingPenalty
     setPendingPenalty(null)
+    setSelectedPlayerId(null)
     if (!pending) return
     await announce(
       recordPenalty({
@@ -151,7 +161,7 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
   const penaltyPlayer = pendingPenalty ? playerById.get(pendingPenalty.playerId) : undefined
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ScoreHeader
         opponentName={game.opponentName}
         isHome={game.isHome}
@@ -179,39 +189,56 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
         />
       )}
 
-      <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Player
-        </h2>
-        <PlayerSelectList
-          players={dressedPlayers}
-          selectedPlayerId={selectedPlayerId}
-          onSelect={handleSelectPlayer}
-        />
-      </section>
-
-      <section>
-        <StatButtonGrid
-          selectedPlayerLabel={
-            selectedPlayer ? `#${selectedPlayer.jerseyNumber} ${selectedPlayer.lastName}` : null
-          }
-          selectedPosition={selectedPlayer?.position ?? null}
+      {isPhone ? (
+        <PhoneStatEntryLayout
+          dressedPlayers={dressedPlayers}
+          selectedPlayer={selectedPlayer}
+          onSelectPlayer={handleSelectPlayer}
+          onBack={handleBackToGrid}
           onStat={(type) => void handleStat(type)}
           onPenalty={handlePenaltyButton}
           onTeamEvent={(type) => void handleTeamEvent(type)}
-        />
-      </section>
-
-      <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Event feed
-        </h2>
-        <EventFeed
           events={events}
           playerById={playerById}
-          onDelete={(event) => void handleDeleteFeedItem(event)}
+          onDeleteEvent={(event) => void handleDeleteFeedItem(event)}
         />
-      </section>
+      ) : (
+        <>
+          <section>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Player
+            </h2>
+            <PlayerSelectList
+              players={dressedPlayers}
+              selectedPlayerId={selectedPlayerId}
+              onSelect={handleSelectPlayer}
+            />
+          </section>
+
+          <section>
+            <StatButtonGrid
+              selectedPlayerLabel={
+                selectedPlayer ? `#${selectedPlayer.jerseyNumber} ${selectedPlayer.lastName}` : null
+              }
+              selectedPosition={selectedPlayer?.position ?? null}
+              onStat={(type) => void handleStat(type)}
+              onPenalty={handlePenaltyButton}
+              onTeamEvent={(type) => void handleTeamEvent(type)}
+            />
+          </section>
+
+          <section>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Event feed
+            </h2>
+            <EventFeed
+              events={events}
+              playerById={playerById}
+              onDelete={(event) => void handleDeleteFeedItem(event)}
+            />
+          </section>
+        </>
+      )}
     </div>
   )
 }

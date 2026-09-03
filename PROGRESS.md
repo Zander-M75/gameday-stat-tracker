@@ -15,7 +15,8 @@ before resuming.
       `/games/:gameId`
 - [x] Phase 4a: Stat entry core (recording logic, undo stack, toasts) — rough
       functional UI, no per-device layout yet
-- [ ] Phase 4b: Phone stat entry layout
+- [x] Phase 4b: Phone stat entry layout — jersey grid ↔ stat buttons swap,
+      collapsible event feed strip
 - [ ] Phase 4c: iPad stat entry layout
 - [ ] Phase 4d: Desktop stat entry layout (keyboard-driven)
 - [ ] Phase 5: Live box score
@@ -34,8 +35,61 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 4a is done. Continue straight into phase 4b (phone layout) next —
+**Phase 4b is done. Continue straight into phase 4c (iPad layout) next —
 the working agreement's next session break is after phase 4d, not here.**
+
+### Phase 4b decisions worth knowing before touching stat entry
+
+- **`StatEntryPanel` now clears `selectedPlayerId` right after a stat or
+  penalty is recorded** (`handleStat`, `handlePenaltyConfirm` in
+  `StatEntryPanel.tsx`), not just on explicit deselect. This is what makes
+  "two taps: tap player, tap stat" actually mean two taps *per event* instead
+  of leaving a player pinned — phase 4c's spec text ("still two taps, but
+  nothing swaps out from under you") assumes the same reset-after-record
+  behavior, just without the screen swap, so don't special-case this to
+  phone-only.
+
+- **`StatEntryPanel` branches on `useBreakpoint().isAtLeast('md')`** to pick
+  phone vs. everything else — phone is `< md` (768px), matching the spec's
+  device buckets. The non-phone branch is still phase 4a's "rough" layout
+  (`PlayerSelectList` / `StatButtonGrid` / `EventFeed`) — phase 4c should
+  replace that branch (not add a third parallel branch) once the iPad-vs-
+  desktop split matters, likely switching on `isAtLeast('xl')` (1280px) for
+  the desktop cut given the nav sidebar already switches at `lg` (1024) for
+  unrelated chrome reasons (see `useBreakpoint.ts`'s `DESKTOP_NAV_MIN`
+  comment) — don't reuse that constant for stat-entry layout, it answers a
+  different question (does the sidebar fit) than "is this a touchscreen or a
+  keyboard+mouse device."
+
+- **New phone-only components**, all in `components/stat-entry/`:
+  `PlayerJerseyGrid` (the grid), `PhoneStatButtons` (replaces the grid once a
+  player is picked), `PhoneStatEntryLayout` (composes team-event row + the
+  grid/buttons swap + the feed strip), `EventFeedStrip` (collapsed-by-default,
+  wraps the existing `EventFeed` when expanded). Team-level buttons
+  (clear attempt/success) live in a row above the swap since they don't need
+  a player selected — don't bury them behind player selection.
+
+- **Bumped `EventFeed`'s delete button from 32px to 56px**
+  (`min-h-14 min-w-14`) — it's reused inside `EventFeedStrip`'s expanded view
+  on phone, and CLAUDE.md's 56px-minimum touch target rule applies there too.
+  This makes the shared `EventFeed` compliant everywhere it's used (including
+  the still-rough iPad/desktop fallback), so phase 4c doesn't need to revisit
+  it for this reason.
+
+- **`EventFeedStrip` is `sticky bottom-0`** inside the flex column, relying
+  on `AppShell`'s `<main>` being the nearest `overflow-y-auto` ancestor and
+  nothing in between (`GameDetailPage`, `StatEntryPanel`,
+  `PhoneStatEntryLayout`) setting its own `overflow`. `StatEntryPanel`'s root
+  is now `flex-1` so the strip sits pinned at the visual bottom of the screen
+  even when there isn't enough content to fill the viewport (e.g. an empty
+  event feed) — if a future phase adds an intermediate scrolling container,
+  the strip will need to move with it.
+
+- **`EventFeedStrip` uses `-mx-4` to bleed to the screen edges**, which
+  assumes its ancestor padding is `GameDetailPage`'s `p-4` (only true below
+  `md`, which is exactly when this component renders). Not a general-purpose
+  component as written — fine for now since it's phone-only, but don't reuse
+  it verbatim at a wider breakpoint without checking that assumption.
 
 - The app is single-coach/single-team: there's no team picker or "create
   team" flow anywhere in the spec, so `getOrCreateTeam()`

@@ -37,7 +37,7 @@ export function EventFeed({ events, playerById, onDelete }: EventFeedProps) {
             type="button"
             onClick={() => onDelete(event)}
             aria-label={`Delete: ${describeEvent(event, playerById)}`}
-            className="flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md text-text-muted hover:text-danger"
+            className="flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-md text-lg text-text-muted hover:text-danger"
           >
             ×
           </button>
