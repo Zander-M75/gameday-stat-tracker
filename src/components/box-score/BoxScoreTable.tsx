@@ -153,7 +153,9 @@ export function BoxScoreTable({ lines, totals }: BoxScoreTableProps) {
 
   function handleSort(key: string) {
     setSort((current) =>
-      current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' },
+      current.key === key
+        ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'desc' },
     )
   }
 
@@ -161,7 +163,10 @@ export function BoxScoreTable({ lines, totals }: BoxScoreTableProps) {
   const sorted = [...lines].sort((a, b) => {
     const va = sortColumn.sortValue(a)
     const vb = sortColumn.sortValue(b)
-    const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+    const cmp =
+      typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb))
     return sort.dir === 'asc' ? cmp : -cmp
   })
 

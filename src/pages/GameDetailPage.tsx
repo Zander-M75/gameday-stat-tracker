@@ -16,7 +16,8 @@ export function GameDetailPage() {
     () => (game ? allPlayersForTeam(game.teamId) : undefined),
     [game?.teamId],
   )
-  const events = useLiveQuery(() => (gameId ? liveEventsForGame(gameId) : undefined), [gameId]) ?? []
+  const events =
+    useLiveQuery(() => (gameId ? liveEventsForGame(gameId) : undefined), [gameId]) ?? []
   const { isAtLeast } = useBreakpoint()
   const isPhone = !isAtLeast('md')
   const [tab, setTab] = useState<GameTab>('entry')

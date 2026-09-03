@@ -127,10 +127,7 @@ export function computePlayerBoxScore(
  * Team totals are the sum of the already-derived player lines, plus the
  * team-level clear events, which have no per-player attribution.
  */
-export function computeTeamBoxScore(
-  playerLines: StatTotals[],
-  events: StatEvent[],
-): TeamBoxScore {
+export function computeTeamBoxScore(playerLines: StatTotals[], events: StatEvent[]): TeamBoxScore {
   const sum = (pick: (line: StatTotals) => number) =>
     playerLines.reduce((total, line) => total + pick(line), 0)
 

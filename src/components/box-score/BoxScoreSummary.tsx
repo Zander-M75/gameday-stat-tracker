@@ -34,7 +34,10 @@ export function BoxScoreSummary({ team }: BoxScoreSummaryProps) {
         <TotalItem label="GB" value={totals.groundBalls} />
         <TotalItem label="TO" value={totals.turnovers} />
         <TotalItem label="CT" value={totals.causedTurnovers} />
-        <TotalItem label="CLR" value={`${clearSuccesses}/${clearAttempts} (${formatPct(clearPct)})`} />
+        <TotalItem
+          label="CLR"
+          value={`${clearSuccesses}/${clearAttempts} (${formatPct(clearPct)})`}
+        />
       </dl>
     </div>
   )
