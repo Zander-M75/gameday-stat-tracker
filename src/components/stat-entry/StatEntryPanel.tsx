@@ -26,6 +26,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { useToast } from '../../toast/ToastProvider'
 import { AssistPicker } from './AssistPicker'
 import { EventFeed } from './EventFeed'
+import { IpadStatEntryLayout } from './IpadStatEntryLayout'
 import { PenaltyPicker } from './PenaltyPicker'
 import { PhoneStatEntryLayout } from './PhoneStatEntryLayout'
 import { PlayerSelectList } from './PlayerSelectList'
@@ -58,6 +59,7 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
   const { showToast } = useToast()
   const { isAtLeast } = useBreakpoint()
   const isPhone = !isAtLeast('md')
+  const isIpad = isAtLeast('md') && !isAtLeast('xl')
   const events = useLiveQuery(() => liveEventsForGame(game.id), [game.id]) ?? []
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
@@ -195,6 +197,19 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
           selectedPlayer={selectedPlayer}
           onSelectPlayer={handleSelectPlayer}
           onBack={handleBackToGrid}
+          onStat={(type) => void handleStat(type)}
+          onPenalty={handlePenaltyButton}
+          onTeamEvent={(type) => void handleTeamEvent(type)}
+          events={events}
+          playerById={playerById}
+          onDeleteEvent={(event) => void handleDeleteFeedItem(event)}
+        />
+      ) : isIpad ? (
+        <IpadStatEntryLayout
+          dressedPlayers={dressedPlayers}
+          selectedPlayer={selectedPlayer}
+          selectedPlayerId={selectedPlayerId}
+          onSelectPlayer={handleSelectPlayer}
           onStat={(type) => void handleStat(type)}
           onPenalty={handlePenaltyButton}
           onTeamEvent={(type) => void handleTeamEvent(type)}

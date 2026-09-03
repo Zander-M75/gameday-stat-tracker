@@ -17,7 +17,8 @@ before resuming.
       functional UI, no per-device layout yet
 - [x] Phase 4b: Phone stat entry layout — jersey grid ↔ stat buttons swap,
       collapsible event feed strip
-- [ ] Phase 4c: iPad stat entry layout
+- [x] Phase 4c: iPad stat entry layout — persistent grid + buttons + feed,
+      landscape adds feed as a third column, portrait stacks it below
 - [ ] Phase 4d: Desktop stat entry layout (keyboard-driven)
 - [ ] Phase 5: Live box score
 - [ ] Phase 6: PWA and offline hardening
@@ -35,8 +36,47 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 4b is done. Continue straight into phase 4c (iPad layout) next —
-the working agreement's next session break is after phase 4d, not here.**
+**Phase 4c is done. Continue straight into phase 4d (desktop layout) next —
+that's the working agreement's next session break, so it should be the last
+phase this session.**
+
+### Phase 4c decisions worth knowing before touching stat entry
+
+- **`StatEntryPanel` now has a three-way branch**: `isPhone` (`< md`),
+  `isIpad` (`md` to `< xl`), and desktop as the `else` — which for now is
+  still phase 4a's original "rough" layout (`PlayerSelectList` /
+  `StatButtonGrid` / `EventFeed`), a placeholder until phase 4d replaces it.
+  The `xl` (1280px) cut for "desktop" matches CLAUDE.md's device buckets
+  directly; don't reuse `useBreakpoint`'s `DESKTOP_NAV_MIN`/`lg` constant
+  here, it answers a different question (sidebar-vs-bottom-tab chrome), see
+  the phase 4b note above.
+
+- **New iPad-only components**, all in `components/stat-entry/`:
+  `IpadPlayerGrid` (like the phone grid, but shows a persistent selected
+  highlight since it never gets swapped away), `IpadStatButtons` (persistent
+  column — player buttons disable with no selection, team buttons don't need
+  one so stay enabled), `IpadStatEntryLayout` (composes them, reading
+  `useBreakpoint().orientation` to decide whether the event feed renders as a
+  third column (landscape) or a stacked block below the grid/buttons row
+  (portrait)).
+
+- **No per-column internal scrolling was built for iPad** — deliberately
+  simpler than that: the whole page scrolls together in `main` (same as
+  phone/rough), rather than giving the grid/buttons/feed each their own
+  `overflow-y-auto` pane. The spec ("player grid on the left, stat buttons
+  persistent on the right, event feed as a live column") only requires they
+  render simultaneously without swapping, not that the page itself stop
+  scrolling — a fully pinned app-shell layout would need `min-h-0`
+  propagated through `GameDetailPage` → `StatEntryPanel` →
+  `IpadStatEntryLayout`, which isn't there today. Revisit only if a real iPad
+  test shows the whole-page-scroll behavior actually feels wrong.
+
+- **`selectedPlayerId` still auto-clears after a stat/penalty records** (the
+  phase 4b behavior in `StatEntryPanel`'s `handleStat`/`handlePenaltyConfirm`)
+  — on iPad this just resets `IpadPlayerGrid`'s highlight and
+  `IpadStatButtons` back to "Select a player" rather than swapping a screen,
+  which is what makes iPad's "still two taps" claim true without needing any
+  iPad-specific logic in the shared handlers.
 
 ### Phase 4b decisions worth knowing before touching stat entry
 
