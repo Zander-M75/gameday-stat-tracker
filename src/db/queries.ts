@@ -111,6 +111,27 @@ export async function setPlayerActive(id: string, isActive: boolean): Promise<vo
   await enqueueSync('player', id)
 }
 
+/**
+ * A real, permanent removal — distinct from archive (setPlayerActive), which
+ * is the right tool for "this player is done for the season" since it keeps
+ * their stat history intact. Delete is for undoing a mistake (wrong jersey
+ * number, an accidental duplicate) before any stats exist to lose. Guarded
+ * at this layer, not just the UI, so the "nothing should ever be lost" rule
+ * can't be violated by a future caller that forgets to check first.
+ */
+export async function deletePlayer(id: string): Promise<void> {
+  const liveEventCount = await db.statEvents
+    .where('playerId')
+    .equals(id)
+    .filter((e) => !e.deleted)
+    .count()
+  if (liveEventCount > 0) {
+    throw new Error('Cannot delete a player with recorded stat events — archive them instead.')
+  }
+  await db.players.delete(id)
+  await enqueueSync('player', id, 'delete')
+}
+
 export async function bulkAddPlayers(teamId: string, inputs: NewPlayerInput[]): Promise<void> {
   const now = Date.now()
   const players: Player[] = inputs.map((input) => ({

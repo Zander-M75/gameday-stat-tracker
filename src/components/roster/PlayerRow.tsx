@@ -1,5 +1,7 @@
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { setPlayerActive, updatePlayer } from '../../db/queries'
+import { db } from '../../db/db'
+import { deletePlayer, setPlayerActive, updatePlayer } from '../../db/queries'
 import type { Player } from '../../db/types'
 import { PlayerForm } from './PlayerForm'
 
@@ -8,6 +10,14 @@ const actionButtonClasses =
 
 export function PlayerRow({ player }: { player: Player }) {
   const [editing, setEditing] = useState(false)
+  // Delete is only offered once we know for certain there's nothing to
+  // lose — undefined (still loading) is treated the same as "has events",
+  // i.e. the button stays disabled rather than flashing enabled early.
+  const liveEventCount = useLiveQuery(
+    () => db.statEvents.where('playerId').equals(player.id).filter((e) => !e.deleted).count(),
+    [player.id],
+  )
+  const canDelete = liveEventCount === 0
 
   if (editing) {
     return (
@@ -59,6 +69,27 @@ export function PlayerRow({ player }: { player: Player }) {
           className={`${actionButtonClasses} text-text-muted`}
         >
           {player.isActive ? 'Archive' : 'Restore'}
+        </button>
+        <button
+          type="button"
+          disabled={!canDelete}
+          title={
+            canDelete
+              ? undefined
+              : 'This player has recorded stats — archive them instead of deleting.'
+          }
+          onClick={() => {
+            if (
+              window.confirm(
+                `Permanently delete ${player.firstName} ${player.lastName}? This can't be undone.`,
+              )
+            ) {
+              void deletePlayer(player.id)
+            }
+          }}
+          className={`${actionButtonClasses} text-danger disabled:cursor-not-allowed disabled:opacity-40`}
+        >
+          Delete
         </button>
       </div>
     </li>
