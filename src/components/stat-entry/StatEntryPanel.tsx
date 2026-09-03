@@ -25,13 +25,11 @@ import { computeScore } from '../../domain/score'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { useToast } from '../../toast/ToastProvider'
 import { AssistPicker } from './AssistPicker'
-import { EventFeed } from './EventFeed'
+import { DesktopStatEntryLayout } from './DesktopStatEntryLayout'
 import { IpadStatEntryLayout } from './IpadStatEntryLayout'
 import { PenaltyPicker } from './PenaltyPicker'
 import { PhoneStatEntryLayout } from './PhoneStatEntryLayout'
-import { PlayerSelectList } from './PlayerSelectList'
 import { ScoreHeader } from './ScoreHeader'
-import { StatButtonGrid } from './StatButtonGrid'
 
 interface StatEntryPanelProps {
   game: Game
@@ -49,11 +47,11 @@ interface PendingPenalty {
 }
 
 /**
- * Shared stat-entry logic and a rough functional UI (phase 4a). Phone/iPad/
- * desktop layouts (4b-4d) will replace how this looks and how a player+stat
- * get picked, but should reuse the handlers here rather than re-deriving
- * them — the recording, undo, toast, and haptic behavior is the same on
- * every device.
+ * Shared stat-entry logic, orchestrating three per-device presentations
+ * (phone, iPad, desktop — phases 4b-4d) that all read/write the same state
+ * and call the same handlers here. Only how a player+stat get picked differs
+ * per layout; recording, undo, toast, and haptic behavior is identical
+ * everywhere.
  */
 export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPanelProps) {
   const { showToast } = useToast()
@@ -91,6 +89,12 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
   function handleBackToGrid() {
     dismissPickers()
     setSelectedPlayerId(null)
+  }
+
+  /** Direct-set, not toggle — driven by DesktopStatEntryLayout's jersey-number keyboard buffer. */
+  function handleMatchPlayer(playerId: string | null) {
+    dismissPickers()
+    setSelectedPlayerId(playerId)
   }
 
   async function handleStat(type: PlayerEventType) {
@@ -218,41 +222,21 @@ export function StatEntryPanel({ game, allPlayers, dressedPlayers }: StatEntryPa
           onDeleteEvent={(event) => void handleDeleteFeedItem(event)}
         />
       ) : (
-        <>
-          <section>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Player
-            </h2>
-            <PlayerSelectList
-              players={dressedPlayers}
-              selectedPlayerId={selectedPlayerId}
-              onSelect={handleSelectPlayer}
-            />
-          </section>
-
-          <section>
-            <StatButtonGrid
-              selectedPlayerLabel={
-                selectedPlayer ? `#${selectedPlayer.jerseyNumber} ${selectedPlayer.lastName}` : null
-              }
-              selectedPosition={selectedPlayer?.position ?? null}
-              onStat={(type) => void handleStat(type)}
-              onPenalty={handlePenaltyButton}
-              onTeamEvent={(type) => void handleTeamEvent(type)}
-            />
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Event feed
-            </h2>
-            <EventFeed
-              events={events}
-              playerById={playerById}
-              onDelete={(event) => void handleDeleteFeedItem(event)}
-            />
-          </section>
-        </>
+        <DesktopStatEntryLayout
+          dressedPlayers={dressedPlayers}
+          selectedPlayer={selectedPlayer}
+          selectedPlayerId={selectedPlayerId}
+          onSelectPlayer={handleSelectPlayer}
+          onMatchPlayer={handleMatchPlayer}
+          onClearSelection={handleBackToGrid}
+          onStat={(type) => void handleStat(type)}
+          onPenalty={handlePenaltyButton}
+          onTeamEvent={(type) => void handleTeamEvent(type)}
+          onUndo={() => void handleUndo()}
+          events={events}
+          playerById={playerById}
+          onDeleteEvent={(event) => void handleDeleteFeedItem(event)}
+        />
       )}
     </div>
   )

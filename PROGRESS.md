@@ -19,7 +19,8 @@ before resuming.
       collapsible event feed strip
 - [x] Phase 4c: iPad stat entry layout — persistent grid + buttons + feed,
       landscape adds feed as a third column, portrait stacks it below
-- [ ] Phase 4d: Desktop stat entry layout (keyboard-driven)
+- [x] Phase 4d: Desktop stat entry layout — three panes, jersey-number +
+      letter-key keyboard entry, Cmd/Ctrl+Z undo, dismissible shortcut hints
 - [ ] Phase 5: Live box score
 - [ ] Phase 6: PWA and offline hardening
 - [ ] Phase 7: Supabase schema and auth
@@ -36,9 +37,61 @@ after phase 3, after phase 4d, and after phase 8.
 
 ## Notes for resuming
 
-**Phase 4c is done. Continue straight into phase 4d (desktop layout) next —
-that's the working agreement's next session break, so it should be the last
-phase this session.**
+**Phase 4d is done — this is the working agreement's session break. Start a
+fresh session before phase 5 (live box score).**
+
+### Phase 4d decisions worth knowing before touching stat entry
+
+- **Phase 4a's "rough" fallback layout is gone.** `StatEntryPanel` is now a
+  clean three-way branch — `isPhone` (`< md`) → `PhoneStatEntryLayout`,
+  `isIpad` (`md` to `< xl`) → `IpadStatEntryLayout`, else →
+  `DesktopStatEntryLayout` — with no placeholder branch left. The original
+  4a components `PlayerSelectList.tsx` and `StatButtonGrid.tsx` were deleted
+  (nothing else referenced them); `EventFeed.tsx` survived because the iPad
+  and desktop layouts both still use it directly.
+
+- **Keyboard entry reuses `selectedPlayerId`, it doesn't add a parallel
+  selection concept.** `DesktopStatEntryLayout` keeps a local
+  `jerseyBuffer` string (sliding last-2-digits-typed window, no Enter
+  needed); on every digit keystroke it looks up a dressed player whose
+  `jerseyNumber` matches the buffer and calls a *new* `onMatchPlayer`
+  handler (`handleMatchPlayer` in `StatEntryPanel` — direct-set, not
+  toggle) to update the exact same `selectedPlayerId` state phone/iPad use.
+  A letter keypress that matches a `PLAYER_STAT_BUTTONS` key then just calls
+  the existing shared `onStat`, which already clears selection on record —
+  so mouse clicks and keyboard both flow through identical handlers with no
+  desktop-specific recording logic.
+
+- **The keydown listener lives inside `DesktopStatEntryLayout` itself**
+  (mounted via `useEffect` on `window`), not in `StatEntryPanel` or
+  somewhere global — since this component only mounts at the desktop
+  breakpoint, the listener mounts/unmounts with it, which is what keeps
+  shortcuts from leaking into phone/iPad (the concern phase 11's
+  cross-device pass explicitly calls out). It ignores all key events while
+  `document.activeElement` is a text input/textarea/contenteditable, and
+  bails out on any other Cmd/Ctrl/Alt combo before touching digit/letter
+  handling so it doesn't hijack real browser shortcuts — only Cmd/Ctrl+Z is
+  special-cased (for undo, via `e.preventDefault()`).
+
+- **Team-event and penalty keys (`r`, `y`, `p` in `domain/statButtons.ts`)
+  work with no player selected**, same as their on-screen buttons; a
+  player-stat letter with no `selectedPlayerId` is a no-op (mirrors the
+  disabled state of those buttons on screen).
+
+- **New desktop-only components**, all in `components/stat-entry/`:
+  `DesktopPlayerList` (a compact clickable list, not a grid — density over
+  touch-target size since desktop's minimum is 40px, and the primary
+  selection path is the keyboard anyway), `DesktopStatButtons` (same
+  primary/rest/penalty/team structure as `IpadStatButtons`, but every button
+  also renders a `<Kbd>` badge with its shortcut letter), and
+  `DesktopStatEntryLayout` (the three-column grid, the jersey-buffer state
+  and readout, the dismissible shortcut-hint banner, and the keydown
+  listener described above).
+
+- **The shortcut-hint banner dismiss state is a plain `useState`**, not
+  persisted anywhere — "until dismissed" was read as "for this
+  visit/session," not "permanently across reloads." Revisit with
+  `localStorage` only if a real user finds it reappearing annoying.
 
 ### Phase 4c decisions worth knowing before touching stat entry
 
