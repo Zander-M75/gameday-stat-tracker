@@ -7,19 +7,18 @@ field — every design decision in this app follows from that constraint.
 
 ## Screenshots
 
-_Not included in this checkout — capturing them requires a running dev
-server and a real browser, and this build only ran `npm run build`/lint/
-format in a non-interactive environment with no browser available. To add
-them: run `npm run dev`, open the app, and use your browser's responsive
-device toolbar (or a real phone/tablet) at roughly 390px (phone), 768px
-(tablet), and 1440px (desktop) — the same three widths this project's
-cross-device pass audited against — then save the images into a
-`docs/screenshots/` folder and reference them here, e.g.:_
+![Desktop — stat entry and live box score](docs/screenshots/desktop-stat-entry.png)
+_Desktop layout: keyboard-driven three-pane stat entry (player list, stat
+buttons with shortcut hints, event feed) with the live box score below._
+
+_Phone and tablet screenshots still needed — capturing them requires a real
+device or a browser's responsive device toolbar at roughly 390px (phone)
+and 768px (tablet), the same widths this project's cross-device pass
+audited against. Save them into `docs/screenshots/` and add them here, e.g.:_
 
 ```md
 ![Phone — stat entry](docs/screenshots/phone-stat-entry.png)
 ![Tablet — box score](docs/screenshots/tablet-box-score.png)
-![Desktop — season leaderboard](docs/screenshots/desktop-season.png)
 ```
 
 ## Features
