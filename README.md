@@ -11,16 +11,6 @@ field — every design decision in this app follows from that constraint.
 _Desktop layout: keyboard-driven three-pane stat entry (player list, stat
 buttons with shortcut hints, event feed) with the live box score below._
 
-_Phone and tablet screenshots still needed — capturing them requires a real
-device or a browser's responsive device toolbar at roughly 390px (phone)
-and 768px (tablet), the same widths this project's cross-device pass
-audited against. Save them into `docs/screenshots/` and add them here, e.g.:_
-
-```md
-![Phone — stat entry](docs/screenshots/phone-stat-entry.png)
-![Tablet — box score](docs/screenshots/tablet-box-score.png)
-```
-
 ## Features
 
 - **Roster management** — add, edit, archive players; bulk-paste a roster
